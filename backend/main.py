@@ -1,10 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import get_settings
+from exceptions import ServiceAccountConfigError
 from routers import auth, clientes, registros
 
 logger = logging.getLogger("uvicorn.error")
@@ -33,6 +35,11 @@ app.add_middleware(CORSMiddleware, **_cors_kw)
 app.include_router(auth.router)
 app.include_router(clientes.router)
 app.include_router(registros.router)
+
+
+@app.exception_handler(ServiceAccountConfigError)
+async def service_account_config_handler(_request: Request, exc: ServiceAccountConfigError):
+    return JSONResponse(status_code=503, content={"detail": exc.message})
 
 
 @app.get("/health")

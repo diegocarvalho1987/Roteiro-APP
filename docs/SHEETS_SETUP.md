@@ -66,3 +66,5 @@ base64 -w0 service-account.json
 ```
 
 Cole o resultado em `GOOGLE_SERVICE_ACCOUNT_JSON` no Railway (sem quebras de linha).
+
+**Railway / painéis web:** se o valor for colado com **quebras de linha** no meio do base64, o decode vira JSON inválido (`JSONDecodeError` / “Unterminated string”). Use **uma única linha** ou rode de novo `base64 -w0` e substitua a variável inteira. No macOS use `base64 -i service-account.json | tr -d '\n'`.

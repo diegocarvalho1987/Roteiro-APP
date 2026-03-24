@@ -5,6 +5,8 @@ from functools import lru_cache
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from exceptions import ServiceAccountConfigError
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -40,9 +42,35 @@ class Settings(BaseSettings):
     def service_account_info(self) -> dict:
         raw = self.google_service_account_json.strip()
         if raw.startswith("{"):
-            return json.loads(raw)
-        decoded = base64.b64decode(raw).decode("utf-8")
-        return json.loads(decoded)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise ServiceAccountConfigError(
+                    "GOOGLE_SERVICE_ACCOUNT_JSON: JSON direto inválido ou truncado. "
+                    "Prefira colar o arquivo inteiro em base64 (uma linha), gerado com: base64 -w0 chave.json. "
+                    f"Erro: {e}"
+                ) from e
+
+        # Remove espaços/quebras — o painel do Railway costuma quebrar linhas no meio do base64
+        b64 = "".join(raw.split())
+        try:
+            decoded = base64.b64decode(b64, validate=False).decode("utf-8")
+        except Exception as e:
+            raise ServiceAccountConfigError(
+                "GOOGLE_SERVICE_ACCOUNT_JSON: não é base64 válido. "
+                "No terminal: base64 -w0 service-account.json e cole o resultado inteiro em UMA variável, sem aspas. "
+                f"Erro: {e}"
+            ) from e
+
+        try:
+            return json.loads(decoded)
+        except json.JSONDecodeError as e:
+            raise ServiceAccountConfigError(
+                "GOOGLE_SERVICE_ACCOUNT_JSON: o base64 decodificou, mas o JSON da service account está quebrado "
+                "(valor cortado, aspas erradas ou quebra de linha dentro da private_key). "
+                "Baixe de novo o JSON no Google Cloud e regenere: base64 -w0 arquivo.json — uma linha só no Railway. "
+                f"Erro: {e}"
+            ) from e
 
 
 @lru_cache
