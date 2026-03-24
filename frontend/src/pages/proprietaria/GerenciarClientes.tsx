@@ -59,6 +59,21 @@ export default function GerenciarClientes() {
     <div className="space-y-4">
       <h2 className="font-display text-2xl font-bold text-roteiro-900">Clientes</h2>
       {err && <p className="text-red-700 bg-red-50 rounded-lg px-3 py-2">{err}</p>}
+      {!err && rows.length === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-6 text-stone-700 space-y-2">
+          <p className="font-medium text-roteiro-900">Nenhum cliente cadastrado ainda.</p>
+          <p className="text-sm">
+            Quem cadastra ponto de venda novo é o <strong>vendedor</strong>: faça logout, entre com o usuário do
+            vendedor e use o menu <strong>Cliente</strong> (nome + GPS). Depois os clientes aparecem aqui para
+            editar nome ou ativar/desativar.
+          </p>
+          <p className="text-sm text-stone-600">
+            Alternativa: inclua uma linha na aba <code className="text-xs bg-white px-1 rounded">clientes</code> da
+            planilha (cabeçalhos do PRD), com <code className="text-xs bg-white px-1 rounded">id</code> UUID,{' '}
+            <code className="text-xs bg-white px-1 rounded">ativo</code> TRUE e coordenadas reais.
+          </p>
+        </div>
+      )}
       <ul className="space-y-2">
         {rows.map((c) => (
           <li
