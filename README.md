@@ -80,7 +80,8 @@ Em ambos os casos, configure as variáveis do `.env` (inclua `CORS_ORIGINS` com 
 
 1. **Root directory:** `frontend`
 2. Build: `npm run build` — Output: `dist`
-3. `VITE_API_URL` = URL pública da API no Railway
+3. **Obrigatório:** em **Settings → Environment Variables**, defina **`VITE_API_URL`** com a URL **completa** da API no Railway (ex.: `https://seu-servico.up.railway.app`), **sem** barra no final. Sem isso o login chama `/auth/login` no próprio domínio da Vercel e retorna **405**.
+4. Depois de criar ou alterar variáveis, faça **Redeploy** (o Vite embute `VITE_*` no build).
 
 O arquivo [`frontend/vercel.json`](frontend/vercel.json) reescreve rotas para o `index.html` (SPA).
 

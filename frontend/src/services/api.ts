@@ -1,5 +1,15 @@
 const base = () => (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
+function apiBaseUrl(): string {
+  const b = base();
+  if (import.meta.env.PROD && !b) {
+    throw new Error(
+      'API não configurada: no Vercel, crie a variável VITE_API_URL com a URL pública do backend (Railway), sem barra no final, e faça um novo deploy.'
+    );
+  }
+  return b;
+}
+
 async function parseError(res: Response): Promise<string> {
   let msg = res.statusText;
   try {
@@ -19,7 +29,9 @@ async function parseError(res: Response): Promise<string> {
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${base()}${path.startsWith('/') ? path : `/${path}`}`;
+  const root = apiBaseUrl();
+  const pathPart = path.startsWith('/') ? path : `/${path}`;
+  const url = root ? `${root}${pathPart}` : pathPart;
   const token = localStorage.getItem('roteiro_token');
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> | undefined),
