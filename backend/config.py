@@ -2,6 +2,7 @@ import base64
 import json
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +12,11 @@ class Settings(BaseSettings):
     google_sheets_id: str
     google_service_account_json: str
 
-    jwt_secret: str = "dev-secret-change-me"
+    # Alias JWT_SFCRFT: typo comum ao copiar variáveis no Railway
+    jwt_secret: str = Field(
+        default="dev-secret-change-me",
+        validation_alias=AliasChoices("JWT_SECRET", "JWT_SFCRFT"),
+    )
     jwt_expiration_hours: int = 24
 
     cors_origins: str = "http://localhost:5173"
@@ -20,7 +25,8 @@ class Settings(BaseSettings):
 
     vendedor_email: str
     vendedor_password_hash: str = ""
-    proprietaria_email: str
+    # Alias PROPRIETARIA_EMATL: typo comum
+    proprietaria_email: str = Field(validation_alias=AliasChoices("PROPRIETARIA_EMAIL", "PROPRIETARIA_EMATL"))
     proprietaria_password_hash: str = ""
 
     allow_plain_passwords: bool = False

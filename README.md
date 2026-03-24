@@ -108,6 +108,17 @@ O arquivo [`frontend/vercel.json`](frontend/vercel.json) reescreve rotas para o 
 
 Documentação interativa: `http://localhost:8000/docs`
 
+## Railway — nomes das variáveis
+
+Os nomes precisam bater **exatamente** com o que o código lê (Pydantic), senão são ignorados:
+
+| Correto | Erro comum |
+|---------|------------|
+| `JWT_SECRET` | `JWT_SFCRFT` |
+| `PROPRIETARIA_EMAIL` | `PROPRIETARIA_EMATL` |
+
+O backend também aceita os nomes errados acima como **alias** (compatibilidade), mas o ideal é corrigir no painel. Login **401** com e-mail certo costuma ser: e-mail da proprietária em variável com typo, ou senha/hash que não confere com `ALLOW_PLAIN_PASSWORDS` / `*_PASSWORD_HASH`.
+
 ## Checklist pós-deploy
 
 - [ ] Planilha compartilhada com a service account
