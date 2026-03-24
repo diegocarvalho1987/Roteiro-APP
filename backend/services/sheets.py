@@ -59,8 +59,12 @@ def _now_sp() -> datetime:
 
 
 def _norm_keys(row: dict[str, Any]) -> dict[str, Any]:
-    """Cabeçalhos da planilha podem vir como Latitude, ATIVO, etc."""
-    return {str(k).strip().lower(): v for k, v in row.items()}
+    """Cabeçalhos da planilha podem vir como Latitude, ATIVO, Id, ou com BOM no A1."""
+    out: dict[str, Any] = {}
+    for k, v in row.items():
+        key = str(k).strip().lower().lstrip("\ufeff")
+        out[key] = v
+    return out
 
 
 @lru_cache
@@ -117,7 +121,13 @@ def row_to_registro(row: dict[str, Any]) -> dict[str, Any]:
 def list_clientes_raw() -> list[dict[str, Any]]:
     ws = _ws_clientes()
     records = ws.get_all_records()
-    return [row_to_cliente(r) for r in records if str(r.get("id", "")).strip()]
+    # Não filtrar com r.get("id") no dict bruto: cabeçalho "Id" ou "\ufeffid" quebra e some a linha.
+    out: list[dict[str, Any]] = []
+    for r in records:
+        c = row_to_cliente(r)
+        if c["id"]:
+            out.append(c)
+    return out
 
 
 def list_clientes(*, somente_ativos: bool) -> list[dict[str, Any]]:
@@ -185,7 +195,12 @@ def update_cliente(cid: str, *, nome: str | None = None, ativo: bool | None = No
 def list_registros_raw() -> list[dict[str, Any]]:
     ws = _ws_registros()
     records = ws.get_all_records()
-    return [row_to_registro(r) for r in records if str(r.get("id", "")).strip()]
+    out: list[dict[str, Any]] = []
+    for r in records:
+        reg = row_to_registro(r)
+        if reg["id"]:
+            out.append(reg)
+    return out
 
 
 def registro_sort_key(r: dict[str, Any]) -> tuple:
