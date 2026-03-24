@@ -33,7 +33,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 | `GOOGLE_SHEETS_ID` | ID da planilha |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | JSON da chave (texto ou base64) |
 | `JWT_SECRET` | Assinatura JWT |
-| `CORS_ORIGINS` | Origens permitidas, separadas por vírgula |
+| `CORS_ORIGINS` | Origens permitidas, separadas por vírgula (ex.: `https://roteiro-app-one.vercel.app`) |
+| `CORS_ORIGIN_REGEX` | (Opcional) Regex extra, ex. previews Vercel: `https://.*\.vercel\.app` |
 | `VENDEDOR_EMAIL` / `PROPRIETARIA_EMAIL` | Logins |
 | `VENDEDOR_PASSWORD_HASH` / `PROPRIETARIA_PASSWORD_HASH` | Hash bcrypt (recomendado) |
 
@@ -74,7 +75,15 @@ Nas **Settings** do serviço Railway, defina **Root Directory** = `backend` e us
 
 (ou o [`Procfile`](backend/Procfile) dentro de `backend`).
 
-Em ambos os casos, configure as variáveis do `.env` (inclua `CORS_ORIGINS` com a URL exata do front na Vercel).
+Em ambos os casos, configure as variáveis do `.env`.
+
+**CORS (obrigatório com front na Vercel):** no Railway, defina **`CORS_ORIGINS`** com a URL **exata** do site, por exemplo:
+
+`https://roteiro-app-one.vercel.app`
+
+(sem `/` no final; se tiver vários domínios, separe por vírgula.) Sem isso o navegador bloqueia o login com erro de CORS no console.
+
+**Preview da Vercel:** cada URL `*.vercel.app` é diferente; ou você adiciona cada uma em `CORS_ORIGINS`, ou usa **`CORS_ORIGIN_REGEX`** = `https://.*\.vercel\.app` (menos restritivo).
 
 ### Vercel (front)
 

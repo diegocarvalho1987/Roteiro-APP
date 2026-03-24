@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     jwt_expiration_hours: int = 24
 
     cors_origins: str = "http://localhost:5173"
+    # Opcional: regex para previews Vercel (ex.: https://.*\.vercel\.app)
+    cors_origin_regex: str = ""
 
     vendedor_email: str
     vendedor_password_hash: str = ""
