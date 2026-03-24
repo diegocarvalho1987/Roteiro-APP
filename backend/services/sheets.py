@@ -31,8 +31,15 @@ def _a1_end_column(zero_based_last_index: int) -> str:
 def _parse_bool(v: Any) -> bool:
     if isinstance(v, bool):
         return v
-    s = str(v).strip().upper()
-    return s in ("TRUE", "1", "SIM", "YES")
+    s = str(v).strip().upper().replace("Á", "A")
+    return s in (
+        "TRUE",
+        "1",
+        "SIM",
+        "YES",
+        "VERDADEIRO",  # planilha Google em português
+        "ON",
+    )
 
 
 def _parse_float(v: Any) -> float:
@@ -49,6 +56,11 @@ def _parse_int(v: Any) -> int:
 
 def _now_sp() -> datetime:
     return datetime.now(TZ)
+
+
+def _norm_keys(row: dict[str, Any]) -> dict[str, Any]:
+    """Cabeçalhos da planilha podem vir como Latitude, ATIVO, etc."""
+    return {str(k).strip().lower(): v for k, v in row.items()}
 
 
 @lru_cache
@@ -73,30 +85,32 @@ def _ws_registros():
 
 
 def row_to_cliente(row: dict[str, Any]) -> dict[str, Any]:
+    r = _norm_keys(row)
     return {
-        "id": str(row.get("id", "")).strip(),
-        "nome": str(row.get("nome", "")).strip(),
-        "latitude": _parse_float(row.get("latitude")),
-        "longitude": _parse_float(row.get("longitude")),
-        "ativo": _parse_bool(row.get("ativo")),
-        "criado_em": str(row.get("criado_em", "")).strip(),
+        "id": str(r.get("id", "")).strip(),
+        "nome": str(r.get("nome", "")).strip(),
+        "latitude": _parse_float(r.get("latitude")),
+        "longitude": _parse_float(r.get("longitude")),
+        "ativo": _parse_bool(r.get("ativo")),
+        "criado_em": str(r.get("criado_em", "")).strip(),
     }
 
 
 def row_to_registro(row: dict[str, Any]) -> dict[str, Any]:
+    r = _norm_keys(row)
     return {
-        "id": str(row.get("id", "")).strip(),
-        "cliente_id": str(row.get("cliente_id", "")).strip(),
-        "cliente_nome": str(row.get("cliente_nome", "")).strip(),
-        "deixou": _parse_int(row.get("deixou")),
-        "tinha": _parse_int(row.get("tinha")),
-        "trocas": _parse_int(row.get("trocas")),
-        "vendido": _parse_int(row.get("vendido")),
-        "data": str(row.get("data", "")).strip(),
-        "hora": str(row.get("hora", "")).strip(),
-        "latitude_registro": _parse_float(row.get("latitude_registro")),
-        "longitude_registro": _parse_float(row.get("longitude_registro")),
-        "registrado_por": str(row.get("registrado_por", "")).strip(),
+        "id": str(r.get("id", "")).strip(),
+        "cliente_id": str(r.get("cliente_id", "")).strip(),
+        "cliente_nome": str(r.get("cliente_nome", "")).strip(),
+        "deixou": _parse_int(r.get("deixou")),
+        "tinha": _parse_int(r.get("tinha")),
+        "trocas": _parse_int(r.get("trocas")),
+        "vendido": _parse_int(r.get("vendido")),
+        "data": str(r.get("data", "")).strip(),
+        "hora": str(r.get("hora", "")).strip(),
+        "latitude_registro": _parse_float(r.get("latitude_registro")),
+        "longitude_registro": _parse_float(r.get("longitude_registro")),
+        "registrado_por": str(r.get("registrado_por", "")).strip(),
     }
 
 

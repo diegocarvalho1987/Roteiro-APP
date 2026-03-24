@@ -33,7 +33,8 @@ Anote o **ID** da planilha (trecho entre `/d/` e `/edit` na URL).
 
 | id | nome | latitude | longitude | ativo | criado_em |
 
-- `ativo`: use `TRUE` ou `FALSE` (ou vazio tratado como inativo no backend se necessário).
+- `ativo`: use `TRUE` / `FALSE` ou, em planilha em português, **`VERDADEIRO` / `FALSO`** (o backend aceita). Célula vazia = inativo.
+- Cabeçalhos podem ter maiúsculas (`Latitude`, `ID`); o backend normaliza para minúsculas. Evite nomes diferentes de `latitude` / `longitude` (ex.: só `lat`).
 - `latitude` / `longitude`: número decimal com ponto (ex: `-29.123456`).
 - `criado_em`: `YYYY-MM-DD HH:MM:SS` (fuso America/Sao_Paulo).
 
