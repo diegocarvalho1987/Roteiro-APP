@@ -37,6 +37,15 @@ class ClienteResponse(BaseModel):
     distancia_metros: float | None = None
 
 
+class ClienteMaisProximoResponse(BaseModel):
+    """Cliente ativo mais próximo do ponto (para explicar fallback manual)."""
+
+    tem_clientes: bool
+    raio_busca_metros: float
+    distancia_metros: float | None = None
+    cliente: ClienteResponse | None = None
+
+
 class RegistroCreate(BaseModel):
     cliente_id: str
     deixou: int = Field(ge=0)

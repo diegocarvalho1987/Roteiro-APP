@@ -3,13 +3,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from dependencies import get_current_user, require_proprietaria, require_vendedor
-from models.schemas import ClienteCreate, ClienteResponse, ClienteUpdate
+from config import get_settings
+from models.schemas import (
+    ClienteCreate,
+    ClienteMaisProximoResponse,
+    ClienteResponse,
+    ClienteUpdate,
+)
 from services import sheets
 from services.geo import haversine_m
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
-
-RAIO_M = 100.0
 
 
 def _to_response(c: dict, dist: float | None = None) -> ClienteResponse:
@@ -43,13 +47,39 @@ def clientes_proximos(
     lng: float = Query(...),
 ):
     _ = user
+    raio_m = get_settings().clientes_raio_metros
     candidatos = []
     for c in sheets.list_clientes(somente_ativos=True):
         d = haversine_m(lat, lng, c["latitude"], c["longitude"])
-        if d <= RAIO_M:
+        if d <= raio_m:
             candidatos.append((d, c))
     candidatos.sort(key=lambda x: x[0])
     return [_to_response(c, dist=d) for d, c in candidatos]
+
+
+@router.get("/mais-proximo", response_model=ClienteMaisProximoResponse)
+def cliente_mais_proximo(
+    user: Annotated[dict, Depends(get_current_user)],
+    lat: float = Query(...),
+    lng: float = Query(...),
+):
+    _ = user
+    raio_m = get_settings().clientes_raio_metros
+    rows = sheets.list_clientes(somente_ativos=True)
+    if not rows:
+        return ClienteMaisProximoResponse(tem_clientes=False, raio_busca_metros=raio_m)
+    best_d = float("inf")
+    best: dict = rows[0]
+    for c in rows:
+        d = haversine_m(lat, lng, c["latitude"], c["longitude"])
+        if d < best_d:
+            best_d, best = d, c
+    return ClienteMaisProximoResponse(
+        tem_clientes=True,
+        raio_busca_metros=raio_m,
+        distancia_metros=best_d,
+        cliente=_to_response(best, dist=best_d),
+    )
 
 
 @router.post("", response_model=ClienteResponse, status_code=status.HTTP_201_CREATED)

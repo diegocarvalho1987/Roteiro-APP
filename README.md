@@ -35,6 +35,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 | `JWT_SECRET` | Assinatura JWT |
 | `CORS_ORIGINS` | Origens permitidas, separadas por vírgula (ex.: `https://roteiro-app-one.vercel.app`) |
 | `CORS_ORIGIN_REGEX` | (Opcional) Regex extra, ex. previews Vercel: `https://.*\.vercel\.app` |
+| `CLIENTES_RAIO_METROS` | (Opcional) Raio em metros para sugerir cliente pelo GPS (padrão **100**; máx. 10 000) |
 | `VENDEDOR_EMAIL` / `PROPRIETARIA_EMAIL` | Logins |
 | `VENDEDOR_PASSWORD_HASH` / `PROPRIETARIA_PASSWORD_HASH` | Hash bcrypt (recomendado) |
 

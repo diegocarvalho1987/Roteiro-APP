@@ -1,9 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../services/api';
-import type { Cliente } from '../../types';
+import type { Cliente, ClienteMaisProximoResponse } from '../../types';
 import { useGeolocalizacao } from '../../hooks/useGeolocalizacao';
 
 type Phase = 'start' | 'gps' | 'confirm' | 'pick' | 'form';
+
+function formatarDistancia(metros: number): string {
+  if (metros >= 1000) return `${(metros / 1000).toFixed(1)} km`;
+  return `${Math.round(metros)} m`;
+}
 
 export default function RegistrarEntrega() {
   const { getPosition, loading: gpsLoading, error: gpsError } = useGeolocalizacao();
@@ -19,6 +24,8 @@ export default function RegistrarEntrega() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /** Só preenchido quando /proximos veio vazio (ajuda a explicar GPS vs cadastro). */
+  const [gpsFallbackInfo, setGpsFallbackInfo] = useState<ClienteMaisProximoResponse | null>(null);
 
   useEffect(() => {
     if (phase === 'pick' && todosClientes.length === 0) {
@@ -31,6 +38,7 @@ export default function RegistrarEntrega() {
   async function iniciarGps() {
     setErr(null);
     setMsg(null);
+    setGpsFallbackInfo(null);
     setPhase('gps');
     try {
       const c = await getPosition();
@@ -42,6 +50,10 @@ export default function RegistrarEntrega() {
         setSuggested(list[0]!);
         setPhase('confirm');
       } else {
+        const info = await api<ClienteMaisProximoResponse>(
+          `/clientes/mais-proximo?lat=${c.latitude}&lng=${c.longitude}`
+        );
+        setGpsFallbackInfo(info);
         setPhase('pick');
       }
     } catch (e) {
@@ -58,6 +70,7 @@ export default function RegistrarEntrega() {
   }
 
   function naoEhEsse() {
+    setGpsFallbackInfo(null);
     setPhase('pick');
   }
 
@@ -73,6 +86,7 @@ export default function RegistrarEntrega() {
     setSuggested(null);
     setSelected(null);
     setFromGps(false);
+    setGpsFallbackInfo(null);
     setErr(null);
     setMsg(null);
     setDeixou(0);
@@ -106,6 +120,7 @@ export default function RegistrarEntrega() {
       setSuggested(null);
       setSelected(null);
       setFromGps(false);
+      setGpsFallbackInfo(null);
       setDeixou(0);
       setTinha(0);
       setTrocas(0);
@@ -176,6 +191,24 @@ export default function RegistrarEntrega() {
 
       {phase === 'pick' && (
         <div className="space-y-3">
+          {gpsFallbackInfo && !gpsFallbackInfo.tem_clientes && (
+            <p className="rounded-xl bg-amber-50 text-amber-950 border border-amber-200 px-4 py-3 text-sm">
+              Não há clientes ativos cadastrados. Cadastre um ponto em <strong>Cliente</strong> ou peça para a
+              proprietária ativar o cadastro.
+            </p>
+          )}
+          {gpsFallbackInfo?.tem_clientes &&
+            gpsFallbackInfo.cliente &&
+            gpsFallbackInfo.distancia_metros != null &&
+            gpsFallbackInfo.distancia_metros > gpsFallbackInfo.raio_busca_metros && (
+              <p className="rounded-xl bg-amber-50 text-amber-950 border border-amber-200 px-4 py-3 text-sm leading-relaxed">
+                Seu GPS está a cerca de <strong>{formatarDistancia(gpsFallbackInfo.distancia_metros)}</strong> do
+                cadastro mais próximo (<strong>{gpsFallbackInfo.cliente.nome}</strong>). A sugestão automática só
+                funciona até <strong>{Math.round(gpsFallbackInfo.raio_busca_metros)} m</strong>. Diferenças de 500 m a
+                mais de 1 km são comuns entre Wi‑Fi e dados móveis ou entre aparelhos. Escolha o cliente abaixo ou
+                atualize latitude/longitude na gestão de clientes.
+              </p>
+            )}
           <p className="text-stone-700">Escolha o cliente manualmente:</p>
           <select
             className="w-full rounded-xl border border-stone-300 px-4 py-4 text-lg bg-white"

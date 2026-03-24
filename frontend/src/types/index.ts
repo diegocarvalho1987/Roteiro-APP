@@ -15,6 +15,13 @@ export type Cliente = {
   distancia_metros?: number | null;
 };
 
+export type ClienteMaisProximoResponse = {
+  tem_clientes: boolean;
+  raio_busca_metros: number;
+  distancia_metros?: number | null;
+  cliente?: Cliente | null;
+};
+
 export type Registro = {
   id: string;
   cliente_id: string;

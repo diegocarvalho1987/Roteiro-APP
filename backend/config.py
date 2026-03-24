@@ -2,7 +2,7 @@ import base64
 import json
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from exceptions import ServiceAccountConfigError
@@ -34,6 +34,16 @@ class Settings(BaseSettings):
     allow_plain_passwords: bool = False
     vendedor_password: str = ""
     proprietaria_password: str = ""
+
+    # Raio (m) para sugerir cliente automaticamente em /clientes/proximos (padrão 100).
+    clientes_raio_metros: float = Field(default=100.0, ge=10.0, le=10_000.0)
+
+    @field_validator("clientes_raio_metros", mode="before")
+    @classmethod
+    def _coerce_raio(cls, v: object) -> object:
+        if v is None or v == "":
+            return 100.0
+        return v
 
     @property
     def cors_origins_list(self) -> list[str]:
