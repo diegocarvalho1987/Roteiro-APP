@@ -60,12 +60,21 @@ npm run dev
 
 ### Railway (API)
 
-1. Novo serviço a partir do repositório; **root directory:** `backend`.
-2. Comando de start (ou use o [`Procfile`](backend/Procfile)):
+O repositório é um **monorepo** (`backend/` + `frontend/`). O **Railpack** na raiz não acha `requirements.txt` sozinho.
 
-   `uvicorn main:app --host 0.0.0.0 --port $PORT`
+**Opção recomendada — Dockerfile na raiz**
 
-3. Defina as mesmas variáveis do `.env` (inclua `CORS_ORIGINS` com a URL exata do front na Vercel).
+Há um [`Dockerfile`](Dockerfile) na raiz que só empacota o `backend/`. Conecte o repo ao Railway e faça redeploy: o build deve usar Docker e subir `uvicorn` na porta `PORT`.
+
+**Opção alternativa — sem Docker**
+
+Nas **Settings** do serviço Railway, defina **Root Directory** = `backend` e use o start:
+
+`uvicorn main:app --host 0.0.0.0 --port $PORT`
+
+(ou o [`Procfile`](backend/Procfile) dentro de `backend`).
+
+Em ambos os casos, configure as variáveis do `.env` (inclua `CORS_ORIGINS` com a URL exata do front na Vercel).
 
 ### Vercel (front)
 
