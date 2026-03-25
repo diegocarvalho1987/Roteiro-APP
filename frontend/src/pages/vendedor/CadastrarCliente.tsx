@@ -2,12 +2,14 @@ import { useRef, useState, type FormEvent } from 'react';
 import { api } from '../../services/api';
 import {
   DEFAULT_GPS_COLLECT_MS,
+  GPS_COLLECT_MAX_TOTAL_MS,
   useGeolocalizacao,
 } from '../../hooks/useGeolocalizacao';
 import type { LocationStatsResult } from '../../utils/locationStats';
 import type { ClienteCadastroPayload } from '../../types';
 
-const MIN_VALID_SAMPLES = 5;
+/** Com getCurrentPosition + watch e término antecipado, 2 amostras bastam; backend aceita >= 1. */
+const MIN_VALID_SAMPLES = 2;
 
 function formatAccuracyM(m: number | null): string {
   if (m == null || !Number.isFinite(m)) return '—';
@@ -126,8 +128,14 @@ export default function CadastrarCliente() {
           disabled={gpsLoading || saving}
           className="w-full rounded-xl border-2 border-roteiro-500 text-roteiro-800 font-semibold py-4 disabled:opacity-60"
         >
-          {gpsLoading ? 'Coletando GPS…' : 'Coletar localização (15 s)'}
+          {gpsLoading ? 'Coletando GPS…' : 'Coletar localização'}
         </button>
+        {!gpsLoading && (
+          <p className="text-xs text-stone-500 -mt-2 px-1">
+            Fique ~2 s parado no local; se o sinal estiver bom, termina na hora. No máximo {GPS_COLLECT_MAX_TOTAL_MS / 1000} s se
+            o GPS estiver fraco.
+          </p>
+        )}
 
         {gpsLoading && collectProgress != null && (
           <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 space-y-2 text-sm text-stone-800">
@@ -156,7 +164,7 @@ export default function CadastrarCliente() {
             </div>
             {extendingWindow && (
               <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
-                Prorrogando até 20 s para tentar obter leituras válidas…
+                Sinal fraco — tentando até {GPS_COLLECT_MAX_TOTAL_MS / 1000} s no total…
               </p>
             )}
             <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:text-sm">

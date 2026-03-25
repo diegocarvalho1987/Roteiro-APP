@@ -8,8 +8,14 @@ import {
 /** Default collection window aligned with product GPS confidence window (local default; not loaded from API). */
 export const DEFAULT_GPS_COLLECT_MS = 15_000;
 
-/** When the default window ends below the required valid sample count, wait until this total elapsed time before failing. */
+/**
+ * Teto de espera se o GPS não entregar amostras suficientes (não soma com a janela inicial — é o máximo desde o início).
+ * Com término antecipado, o fluxo costuma acabar em poucos segundos.
+ */
 export const GPS_COLLECT_MAX_TOTAL_MS = 20_000;
+
+/** Mínimo de tempo parado antes de aceitar sucesso antecipado (evita fechar no primeiro fix instável). */
+export const GPS_COLLECT_EARLY_MIN_MS = 2_000;
 
 export type Coords = {
   latitude: number;
@@ -44,10 +50,13 @@ function geolocationErrorMessage(err: GeolocationPositionError): string {
 }
 
 function sampleFromPosition(pos: GeolocationPosition): PositionSample {
+  const acc = pos.coords.accuracy;
+  const accuracy =
+    typeof acc === 'number' && Number.isFinite(acc) && acc >= 0 ? acc : 400;
   return {
     latitude: pos.coords.latitude,
     longitude: pos.coords.longitude,
-    accuracy: pos.coords.accuracy,
+    accuracy,
   };
 }
 
@@ -278,8 +287,8 @@ export function useGeolocalizacao() {
           finishActiveCollection(collectionId, ({ resolve: resolveActive, reject: rejectActive }) => {
             const stats = computeLocationStats(samples);
             if (!stats) {
-              const msg =
-                'Não obtivemos nenhuma leitura válida do GPS em até 20 segundos. Verifique o sinal e tente de novo.';
+              const sec = Math.round(GPS_COLLECT_MAX_TOTAL_MS / 1000);
+              const msg = `Não obtivemos nenhuma leitura válida do GPS em até ${sec} s. Verifique o sinal e tente de novo.`;
               if (isMountedRef.current) {
                 setError(msg);
               }
@@ -287,7 +296,8 @@ export function useGeolocalizacao() {
               return;
             }
             if (stats.count < minValidSamples) {
-              const msg = `Não foi possível obter ${minValidSamples} leituras válidas do GPS em até 20 segundos. Tente novamente em local aberto.`;
+              const sec = Math.round(GPS_COLLECT_MAX_TOTAL_MS / 1000);
+              const msg = `Não foi possível obter ${minValidSamples} leituras válidas do GPS em até ${sec} s. Tente de novo em local aberto ou espere o sinal melhorar.`;
               if (isMountedRef.current) {
                 setError(msg);
               }
@@ -296,6 +306,27 @@ export function useGeolocalizacao() {
             }
             resolveActive({ stats, samples });
           });
+        };
+
+        const tryEarlyFinish = () => {
+          if (activeCollectionIdRef.current !== collectionId || activeCollectionSettledRef.current) {
+            return;
+          }
+          const samples = [...collectSamplesRef.current];
+          const statsNow = computeLocationStats(samples);
+          const elapsed = Date.now() - collectStartedAtRef.current;
+          if (
+            !statsNow ||
+            statsNow.count < minValidSamples ||
+            elapsed < GPS_COLLECT_EARLY_MIN_MS
+          ) {
+            return;
+          }
+          if (collectFinishTimeoutRef.current !== null) {
+            clearTimeout(collectFinishTimeoutRef.current);
+            collectFinishTimeoutRef.current = null;
+          }
+          finish(samples);
         };
 
         const updateElapsed = () => {
@@ -309,6 +340,7 @@ export function useGeolocalizacao() {
               collectStartedAtRef.current
             )
           );
+          tryEarlyFinish();
         };
 
         collectIntervalRef.current = setInterval(updateElapsed, 200);
@@ -327,6 +359,7 @@ export function useGeolocalizacao() {
                 collectStartedAtRef.current
               )
             );
+            tryEarlyFinish();
           },
           (err) => {
             const msg = geolocationErrorMessage(err);
@@ -338,6 +371,27 @@ export function useGeolocalizacao() {
             });
           },
           { enableHighAccuracy: true, maximumAge: 0, timeout: 30_000 }
+        );
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (activeCollectionIdRef.current !== collectionId || activeCollectionSettledRef.current) {
+              return;
+            }
+            collectSamplesRef.current.push(sampleFromPosition(pos));
+            setCollectProgress(
+              collectProgressSnapshot(
+                collectSamplesRef.current,
+                durationMs,
+                collectStartedAtRef.current
+              )
+            );
+            tryEarlyFinish();
+          },
+          () => {
+            /* watchPosition ainda pode entregar amostras */
+          },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 18_000 }
         );
 
         const scheduleTryFinish = (delayMs: number) => {
