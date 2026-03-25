@@ -3,10 +3,11 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 import gspread
+from gspread.exceptions import WorksheetNotFound
 from google.oauth2.service_account import Credentials
 
 from config import get_settings
@@ -16,6 +17,9 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 CLIENTES_SHEET = "clientes"
 REGISTROS_SHEET = "registros"
+CLIENTE_LOCALIZACOES_SHEET = "cliente_localizacoes"
+
+OrigemClienteLocalizacao = Literal["cadastro_inicial", "registro_confirmado"]
 
 
 def _a1_end_column(zero_based_last_index: int) -> str:
@@ -58,11 +62,15 @@ def _now_sp() -> datetime:
     return datetime.now(TZ)
 
 
+def _normalize_header_name(v: Any) -> str:
+    return str(v).strip().lower().lstrip("\ufeff")
+
+
 def _norm_keys(row: dict[str, Any]) -> dict[str, Any]:
     """Cabeçalhos da planilha podem vir como Latitude, ATIVO, Id, ou com BOM no A1."""
     out: dict[str, Any] = {}
     for k, v in row.items():
-        key = str(k).strip().lower().lstrip("\ufeff")
+        key = _normalize_header_name(k)
         out[key] = v
     return out
 
@@ -88,6 +96,28 @@ def _ws_registros():
     return _sh().worksheet(REGISTROS_SHEET)
 
 
+def _try_ws_cliente_localizacoes():
+    try:
+        return _sh().worksheet(CLIENTE_LOCALIZACOES_SHEET)
+    except WorksheetNotFound:
+        return None
+
+
+def _parse_csv_id_list(v: Any) -> list[str]:
+    if v is None:
+        return []
+    s = str(v).strip()
+    if not s:
+        return []
+    return [p.strip() for p in s.split(",") if p.strip()]
+
+
+def _format_csv_id_list(ids: list[str] | None) -> str:
+    if not ids:
+        return ""
+    return ",".join(ids)
+
+
 def row_to_cliente(row: dict[str, Any]) -> dict[str, Any]:
     r = _norm_keys(row)
     return {
@@ -97,6 +127,10 @@ def row_to_cliente(row: dict[str, Any]) -> dict[str, Any]:
         "longitude": _parse_float(r.get("longitude")),
         "ativo": _parse_bool(r.get("ativo")),
         "criado_em": str(r.get("criado_em", "")).strip(),
+        "gps_accuracy_media": _parse_float(r.get("gps_accuracy_media")),
+        "gps_accuracy_min": _parse_float(r.get("gps_accuracy_min")),
+        "gps_amostras": _parse_int(r.get("gps_amostras")),
+        "gps_atualizado_em": str(r.get("gps_atualizado_em", "")).strip(),
     }
 
 
@@ -115,6 +149,25 @@ def row_to_registro(row: dict[str, Any]) -> dict[str, Any]:
         "latitude_registro": _parse_float(r.get("latitude_registro")),
         "longitude_registro": _parse_float(r.get("longitude_registro")),
         "registrado_por": str(r.get("registrado_por", "")).strip(),
+        "gps_accuracy_registro": _parse_float(r.get("gps_accuracy_registro")),
+        "gps_source": str(r.get("gps_source", "")).strip(),
+        "cliente_sugerido_id": str(r.get("cliente_sugerido_id", "")).strip(),
+        "candidatos_ids": _parse_csv_id_list(r.get("candidatos_ids")),
+        "aprendizado_permitido": _parse_bool(r.get("aprendizado_permitido")),
+    }
+
+
+def row_to_cliente_localizacao(row: dict[str, Any]) -> dict[str, Any]:
+    r = _norm_keys(row)
+    return {
+        "id": str(r.get("id", "")).strip(),
+        "cliente_id": str(r.get("cliente_id", "")).strip(),
+        "latitude": _parse_float(r.get("latitude")),
+        "longitude": _parse_float(r.get("longitude")),
+        "origem": str(r.get("origem", "")).strip(),
+        "confiavel": _parse_bool(r.get("confiavel")),
+        "accuracy": _parse_float(r.get("accuracy")),
+        "criado_em": str(r.get("criado_em", "")).strip(),
     }
 
 
@@ -145,10 +198,33 @@ def get_cliente_by_id(cid: str) -> dict[str, Any] | None:
     return None
 
 
-def append_cliente(nome: str, latitude: float, longitude: float) -> dict[str, Any]:
+def append_cliente(
+    nome: str,
+    latitude: float,
+    longitude: float,
+    *,
+    gps_accuracy_media: float | None = None,
+    gps_accuracy_min: float | None = None,
+    gps_amostras: int | None = None,
+    gps_atualizado_em: str | None = None,
+) -> dict[str, Any]:
     cid = str(uuid.uuid4())
     criado = _now_sp().strftime("%Y-%m-%d %H:%M:%S")
-    row = [cid, nome, latitude, longitude, "TRUE", criado]
+    gps_atualizado = (gps_atualizado_em or "").strip()
+    if not gps_atualizado and any(v is not None for v in (gps_accuracy_media, gps_accuracy_min, gps_amostras)):
+        gps_atualizado = criado
+    row = [
+        cid,
+        nome,
+        latitude,
+        longitude,
+        "TRUE",
+        criado,
+        "" if gps_accuracy_media is None else gps_accuracy_media,
+        "" if gps_accuracy_min is None else gps_accuracy_min,
+        "" if gps_amostras is None else gps_amostras,
+        gps_atualizado,
+    ]
     _ws_clientes().append_row(row, value_input_option="USER_ENTERED")
     return {
         "id": cid,
@@ -157,21 +233,48 @@ def append_cliente(nome: str, latitude: float, longitude: float) -> dict[str, An
         "longitude": longitude,
         "ativo": True,
         "criado_em": criado,
+        "gps_accuracy_media": gps_accuracy_media if gps_accuracy_media is not None else 0.0,
+        "gps_accuracy_min": gps_accuracy_min if gps_accuracy_min is not None else 0.0,
+        "gps_amostras": gps_amostras if gps_amostras is not None else 0,
+        "gps_atualizado_em": gps_atualizado,
     }
 
 
-def update_cliente(cid: str, *, nome: str | None = None, ativo: bool | None = None) -> dict[str, Any] | None:
+def _idx(headers: list[str], name: str) -> int | None:
+    try:
+        return headers.index(name)
+    except ValueError:
+        return None
+
+
+def update_cliente(
+    cid: str,
+    *,
+    nome: str | None = None,
+    ativo: bool | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    gps_atualizado_em: str | None = None,
+    gps_accuracy_media: float | None = None,
+    gps_accuracy_min: float | None = None,
+    gps_amostras: int | None = None,
+) -> dict[str, Any] | None:
     ws = _ws_clientes()
     values = ws.get_all_values()
     if len(values) < 2:
         return None
-    headers = [h.strip().lower() for h in values[0]]
-    try:
-        idx_id = headers.index("id")
-        idx_nome = headers.index("nome")
-        idx_ativo = headers.index("ativo")
-    except ValueError:
+    headers = [_normalize_header_name(h) for h in values[0]]
+    idx_id = _idx(headers, "id")
+    idx_nome = _idx(headers, "nome")
+    idx_ativo = _idx(headers, "ativo")
+    if idx_id is None or idx_nome is None or idx_ativo is None:
         return None
+    idx_lat = _idx(headers, "latitude")
+    idx_lon = _idx(headers, "longitude")
+    idx_gps_em = _idx(headers, "gps_atualizado_em")
+    idx_gps_med = _idx(headers, "gps_accuracy_media")
+    idx_gps_min = _idx(headers, "gps_accuracy_min")
+    idx_gps_n = _idx(headers, "gps_amostras")
     ncols = len(headers)
     end_letter = _a1_end_column(ncols - 1)
     for i, row in enumerate(values[1:], start=2):
@@ -186,6 +289,18 @@ def update_cliente(cid: str, *, nome: str | None = None, ativo: bool | None = No
                 new_row[idx_nome] = nome
             if ativo is not None:
                 new_row[idx_ativo] = "TRUE" if ativo else "FALSE"
+            if latitude is not None and idx_lat is not None:
+                new_row[idx_lat] = latitude
+            if longitude is not None and idx_lon is not None:
+                new_row[idx_lon] = longitude
+            if gps_atualizado_em is not None and idx_gps_em is not None:
+                new_row[idx_gps_em] = gps_atualizado_em.strip()
+            if gps_accuracy_media is not None and idx_gps_med is not None:
+                new_row[idx_gps_med] = gps_accuracy_media
+            if gps_accuracy_min is not None and idx_gps_min is not None:
+                new_row[idx_gps_min] = gps_accuracy_min
+            if gps_amostras is not None and idx_gps_n is not None:
+                new_row[idx_gps_n] = gps_amostras
             ws.update(f"A{i}:{end_letter}{i}", [new_row], value_input_option="USER_ENTERED")
             merged = {headers[j]: new_row[j] if j < len(new_row) else "" for j in range(len(headers))}
             return row_to_cliente(merged)
@@ -220,11 +335,21 @@ def append_registro(
     latitude_registro: float,
     longitude_registro: float,
     registrado_por: str,
+    gps_accuracy_registro: float | None = None,
+    gps_source: str | None = None,
+    cliente_sugerido_id: str | None = None,
+    candidatos_ids: list[str] | None = None,
+    aprendizado_permitido: bool | None = None,
 ) -> dict[str, Any]:
     rid = str(uuid.uuid4())
     now = _now_sp()
     data_s = now.strftime("%Y-%m-%d")
     hora_s = now.strftime("%H:%M:%S")
+    ap_cell = ""
+    if aprendizado_permitido is True:
+        ap_cell = "TRUE"
+    elif aprendizado_permitido is False:
+        ap_cell = "FALSE"
     row = [
         rid,
         cliente_id,
@@ -238,8 +363,14 @@ def append_registro(
         latitude_registro,
         longitude_registro,
         registrado_por,
+        "" if gps_accuracy_registro is None else gps_accuracy_registro,
+        (gps_source or "").strip(),
+        (cliente_sugerido_id or "").strip(),
+        _format_csv_id_list(candidatos_ids),
+        ap_cell,
     ]
     _ws_registros().append_row(row, value_input_option="USER_ENTERED")
+    cands = list(candidatos_ids) if candidatos_ids else []
     return {
         "id": rid,
         "cliente_id": cliente_id,
@@ -253,6 +384,54 @@ def append_registro(
         "latitude_registro": latitude_registro,
         "longitude_registro": longitude_registro,
         "registrado_por": registrado_por,
+        "gps_accuracy_registro": gps_accuracy_registro if gps_accuracy_registro is not None else 0.0,
+        "gps_source": (gps_source or "").strip(),
+        "cliente_sugerido_id": (cliente_sugerido_id or "").strip(),
+        "candidatos_ids": cands,
+        "aprendizado_permitido": False if aprendizado_permitido is None else bool(aprendizado_permitido),
+    }
+
+
+def list_cliente_localizacoes_raw() -> list[dict[str, Any]]:
+    ws = _try_ws_cliente_localizacoes()
+    if ws is None:
+        return []
+    records = ws.get_all_records()
+    out: list[dict[str, Any]] = []
+    for r in records:
+        loc = row_to_cliente_localizacao(r)
+        if loc["id"]:
+            out.append(loc)
+    return out
+
+
+def append_cliente_localizacao(
+    *,
+    cliente_id: str,
+    latitude: float,
+    longitude: float,
+    origem: OrigemClienteLocalizacao,
+    confiavel: bool = False,
+    accuracy: float | None = None,
+) -> dict[str, Any] | None:
+    ws = _try_ws_cliente_localizacoes()
+    if ws is None:
+        return None
+    lid = str(uuid.uuid4())
+    criado = _now_sp().strftime("%Y-%m-%d %H:%M:%S")
+    conf_cell = "TRUE" if confiavel else "FALSE"
+    acc_cell = "" if accuracy is None else accuracy
+    row = [lid, cliente_id.strip(), latitude, longitude, origem, conf_cell, acc_cell, criado]
+    ws.append_row(row, value_input_option="USER_ENTERED")
+    return {
+        "id": lid,
+        "cliente_id": cliente_id.strip(),
+        "latitude": latitude,
+        "longitude": longitude,
+        "origem": origem,
+        "confiavel": confiavel,
+        "accuracy": float(accuracy) if accuracy is not None else 0.0,
+        "criado_em": criado,
     }
 
 

@@ -1,1 +1,1 @@
-id,nome,latitude,longitude,ativo,criado_em
+id,nome,latitude,longitude,ativo,criado_em,gps_accuracy_media,gps_accuracy_min,gps_amostras,gps_atualizado_em

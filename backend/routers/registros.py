@@ -1,16 +1,20 @@
+import logging
 from datetime import datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from config import get_settings
 from dependencies import get_current_user, require_proprietaria, require_vendedor
 from models.schemas import RegistroCreate, RegistroResponse
-from services import sheets
+from routers.clientes import ranked_sugestao_candidates
+from services import location_learning, sheets
 from services.aggregates import build_dashboard, build_resumo_semanal, iso_week_now
 
 router = APIRouter(prefix="/registros", tags=["registros"])
 TZ = ZoneInfo("America/Sao_Paulo")
+logger = logging.getLogger(__name__)
 
 
 def _to_registro_response(r: dict) -> RegistroResponse:
@@ -92,6 +96,32 @@ def criar_registro(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Valores inconsistentes: vendido não pode ser negativo (deixou - tinha + trocas).",
         )
+    settings = None
+    candidatos_servidor_ids: list[str] = []
+    cliente_sugerido_servidor_id: str | None = None
+    cliente_sugerido_servidor_distancia_m: float | None = None
+    aprendizado_efetivo = False
+    try:
+        settings = get_settings()
+        limite = settings.clientes_sugestoes_limite
+        candidatos_servidor = ranked_sugestao_candidates(body.latitude_registro, body.longitude_registro)[:limite]
+        candidatos_servidor_ids = [c["id"] for _, c in candidatos_servidor]
+        if candidatos_servidor:
+            cliente_sugerido_servidor_distancia_m = candidatos_servidor[0][0]
+            cliente_sugerido_servidor_id = candidatos_servidor[0][1]["id"]
+        aprendizado_efetivo = location_learning.observacao_confiavel_para_aprendizado(
+            body.cliente_id,
+            cliente_sugerido_servidor_id,
+            cliente_sugerido_servidor_distancia_m,
+            body.aprendizado_permitido,
+            body.gps_source,
+            body.gps_accuracy_registro,
+            settings,
+        )
+    except Exception:
+        logger.warning("Falha ao preparar aprendizado de localizacao do cliente.", exc_info=True)
+        aprendizado_efetivo = False
+
     r = sheets.append_registro(
         cliente_id=body.cliente_id,
         cliente_nome=cliente["nome"],
@@ -102,7 +132,46 @@ def criar_registro(
         latitude_registro=body.latitude_registro,
         longitude_registro=body.longitude_registro,
         registrado_por=registrado_por,
+        gps_accuracy_registro=body.gps_accuracy_registro,
+        gps_source=body.gps_source,
+        cliente_sugerido_id=cliente_sugerido_servidor_id,
+        candidatos_ids=candidatos_servidor_ids,
+        aprendizado_permitido=aprendizado_efetivo,
     )
+
+    try:
+        loc_atual = sheets.append_cliente_localizacao(
+            cliente_id=body.cliente_id,
+            latitude=body.latitude_registro,
+            longitude=body.longitude_registro,
+            origem="registro_confirmado",
+            confiavel=aprendizado_efetivo,
+            accuracy=body.gps_accuracy_registro,
+        )
+    except Exception:
+        logger.warning("Falha ao salvar historico de localizacao do cliente.", exc_info=True)
+        return _to_registro_response(r)
+
+    if loc_atual is None:
+        logger.warning("Historico de localizacao indisponivel; aprendizado de GPS ignorado.")
+        return _to_registro_response(r)
+
+    if settings is None:
+        return _to_registro_response(r)
+
+    try:
+        locs = [loc for loc in sheets.list_cliente_localizacoes_raw() if loc["cliente_id"] == body.cliente_id]
+    except Exception:
+        logger.warning("Falha ao carregar historico de localizacao do cliente.", exc_info=True)
+        return _to_registro_response(r)
+
+    patch = location_learning.recalculate_cliente_position(cliente, locs, settings)
+    if patch is not None:
+        try:
+            sheets.update_cliente(body.cliente_id, **patch)
+        except Exception:
+            logger.warning("Falha ao atualizar posicao aprendida do cliente.", exc_info=True)
+
     return _to_registro_response(r)
 
 

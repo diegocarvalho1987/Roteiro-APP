@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,12 +9,24 @@ from models.schemas import (
     ClienteCreate,
     ClienteMaisProximoResponse,
     ClienteResponse,
+    ClienteSugestao,
     ClienteUpdate,
+    ConfiancaGps,
 )
 from services import sheets
 from services.geo import haversine_m
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
+logger = logging.getLogger(__name__)
+
+
+def confidence_for_distance(distance_m: float, *, alta_m: float, media_m: float) -> ConfiancaGps:
+    """Classifica distância até o cliente em níveis de confiança (v1: só por distância)."""
+    if distance_m <= alta_m:
+        return "alta"
+    if distance_m <= media_m:
+        return "media"
+    return "baixa"
 
 
 def _to_response(c: dict, dist: float | None = None) -> ClienteResponse:
@@ -26,6 +39,15 @@ def _to_response(c: dict, dist: float | None = None) -> ClienteResponse:
         criado_em=c["criado_em"],
         distancia_metros=dist,
     )
+
+
+def ranked_sugestao_candidates(lat: float, lng: float) -> list[tuple[float, dict]]:
+    candidatos: list[tuple[float, dict]] = []
+    for c in sheets.list_clientes(somente_ativos=True):
+        d = haversine_m(lat, lng, c["latitude"], c["longitude"])
+        candidatos.append((d, c))
+    candidatos.sort(key=lambda x: x[0])
+    return candidatos
 
 
 @router.get("", response_model=list[ClienteResponse])
@@ -55,6 +77,27 @@ def clientes_proximos(
             candidatos.append((d, c))
     candidatos.sort(key=lambda x: x[0])
     return [_to_response(c, dist=d) for d, c in candidatos]
+
+
+@router.get("/sugestoes", response_model=list[ClienteSugestao])
+def clientes_sugestoes(
+    user: Annotated[dict, Depends(get_current_user)],
+    lat: float = Query(...),
+    lng: float = Query(...),
+):
+    _ = user
+    settings = get_settings()
+    limite = settings.clientes_sugestoes_limite
+    alta_m = settings.gps_confianca_alta_m
+    media_m = settings.gps_confianca_media_m
+    candidatos = ranked_sugestao_candidates(lat, lng)
+    return [
+        ClienteSugestao(
+            cliente=_to_response(c, dist=d),
+            confianca=confidence_for_distance(d, alta_m=alta_m, media_m=media_m),
+        )
+        for d, c in candidatos[:limite]
+    ]
 
 
 @router.get("/mais-proximo", response_model=ClienteMaisProximoResponse)
@@ -88,7 +131,23 @@ def criar_cliente(
     user: Annotated[dict, Depends(require_vendedor)],
 ):
     _ = user
-    c = sheets.append_cliente(body.nome.strip(), body.latitude, body.longitude)
+    c = sheets.append_cliente(
+        body.nome.strip(),
+        body.latitude,
+        body.longitude,
+        gps_accuracy_media=body.gps_accuracy_media,
+        gps_accuracy_min=body.gps_accuracy_min,
+        gps_amostras=body.gps_amostras,
+    )
+    try:
+        sheets.append_cliente_localizacao(
+            cliente_id=c["id"],
+            latitude=body.latitude,
+            longitude=body.longitude,
+            origem="cadastro_inicial",
+        )
+    except Exception:
+        logger.warning("Falha ao salvar localizacao inicial do cliente.", exc_info=True)
     return _to_response(c)
 
 

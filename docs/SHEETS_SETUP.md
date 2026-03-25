@@ -13,15 +13,18 @@
 
 Não dá para criar arquivos automaticamente **no seu** Drive daqui; use os modelos com cabeçalhos já prontos:
 
-- [`templates/clientes.csv`](templates/clientes.csv)
-- [`templates/registros.csv`](templates/registros.csv)
+- [`docs/templates/clientes.csv`](docs/templates/clientes.csv)
+- [`docs/templates/registros.csv`](docs/templates/registros.csv)
 
 No Google Drive: **Novo → Planilhas Google** → renomeie para `roteiro-dados`.
 
 1. Aba 1: renomeie para **`clientes`** → **Arquivo → Importar → Upload** → escolha `clientes.csv` → **Substituir planilha** ou **Inserir novas linhas** (deixe só a linha de cabeçalho se a planilha estiver vazia).
 2. **+** nova aba → renomeie para **`registros`** → importe `registros.csv` da mesma forma.
+3. (Opcional, histórico de posições) **+** nova aba → renomeie para **`cliente_localizacoes`** → na linha 1 cole os cabeçalhos indicados na seção abaixo (mesma ordem). Essa aba é opcional **apenas** se a equipe aceitar operar sem aprendizado/recalibração automática de GPS.
 
 Confira se a **linha 1** de cada aba é exatamente a linha de cabeçalhos (sem linhas em branco acima).
+
+**Planilhas já existentes:** adicione na **linha 1**, à direita das colunas antigas, os novos cabeçalhos na ordem abaixo; deixe células vazias nas linhas de dados antigos nas novas colunas.
 
 ### Opção B — Manual
 
@@ -31,22 +34,48 @@ Anote o **ID** da planilha (trecho entre `/d/` e `/edit` na URL).
 
 ### Aba `clientes` — linha 1 (cabeçalhos)
 
-| id | nome | latitude | longitude | ativo | criado_em |
+Ordem exata (nomes em minúsculas recomendados; o backend normaliza e aceita `VERDADEIRO`/`FALSO` em `ativo`):
+
+`id` · `nome` · `latitude` · `longitude` · `ativo` · `criado_em` · `gps_accuracy_media` · `gps_accuracy_min` · `gps_amostras` · `gps_atualizado_em`
 
 - `ativo`: use `TRUE` / `FALSE` ou, em planilha em português, **`VERDADEIRO` / `FALSO`** (o backend aceita). Célula vazia = inativo.
 - Cabeçalhos podem ter maiúsculas (`Latitude`, `ID`); o backend normaliza para minúsculas. Evite nomes diferentes de `latitude` / `longitude` (ex.: só `lat`).
 - `latitude` / `longitude`: número decimal com ponto (ex: `-29.123456`).
 - `criado_em`: `YYYY-MM-DD HH:MM:SS` (fuso America/Sao_Paulo).
+- `gps_accuracy_media` / `gps_accuracy_min`: metros (número); célula vazia é aceita em linhas antigas ou sem metadados.
+- `gps_amostras`: inteiro; vazio = tratado como zero na leitura.
+- `gps_atualizado_em`: texto no mesmo formato de `criado_em` ou vazio.
 
 ### Aba `registros` — linha 1 (cabeçalhos)
 
-| id | cliente_id | cliente_nome | deixou | tinha | trocas | vendido | data | hora | latitude_registro | longitude_registro | registrado_por |
+Ordem exata:
+
+`id` · `cliente_id` · `cliente_nome` · `deixou` · `tinha` · `trocas` · `vendido` · `data` · `hora` · `latitude_registro` · `longitude_registro` · `registrado_por` · `gps_accuracy_registro` · `gps_source` · `cliente_sugerido_id` · `candidatos_ids` · `aprendizado_permitido`
 
 - `data`: `YYYY-MM-DD`
 - `hora`: `HH:MM:SS`
 - `registrado_por`: e-mail do usuário (mesmo valor do login).
+- `gps_accuracy_registro`: metros; vazio permitido.
+- `gps_source`: `live` / `warm` ou vazio.
+- `cliente_sugerido_id`: UUID/texto do cliente sugerido pelo app; vazio permitido.
+- `candidatos_ids`: lista de IDs separados por **vírgula** (ex.: `uuid1,uuid2`); espaços ao redor de cada ID são ignorados.
+- `aprendizado_permitido`: `TRUE` / `FALSE` ou vazio (lido como falso). O backend persiste aqui a decisão efetiva de elegibilidade para aprendizado.
 
 Deixe a linha 2 em branco ou comece os dados na linha 2; o backend **anexa** novas linhas.
+
+### Aba `cliente_localizacoes` — linha 1 (opcional)
+
+Histórico de coordenadas associadas a um cliente. Se a aba **não existir**, o app continua registrando entregas normalmente, mas não aprende nem recalcula posições de clientes automaticamente. As operações de anexo/listagem nessa aba são ignoradas sem falha.
+
+Ordem exata:
+
+`id` · `cliente_id` · `latitude` · `longitude` · `origem` · `confiavel` · `accuracy` · `criado_em`
+
+- `origem`: valores suportados pelo backend: `cadastro_inicial` ou `registro_confirmado`.
+- `confiavel`: `TRUE` / `FALSE` indicando se a observação passou na regra do servidor para aprendizado.
+- `accuracy`: precisão do GPS em metros; vazio permitido quando a observação não informar esse valor.
+- `criado_em`: `YYYY-MM-DD HH:MM:SS` (fuso America/Sao_Paulo).
+- **Migração de planilhas existentes:** se sua aba `cliente_localizacoes` antiga tinha só 6 colunas, insira `confiavel` e `accuracy` **entre** `origem` e `criado_em`. Se essas colunas forem apenas adicionadas no fim ou em outra ordem, novas gravações ficarão desalinhadas.
 
 ## 3. Troubleshooting
 

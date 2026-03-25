@@ -5,6 +5,9 @@ export type LoginResponse = {
   perfil: Perfil;
 };
 
+export type ConfiancaGps = 'alta' | 'media' | 'baixa';
+export type GpsSource = 'live' | 'warm';
+
 export type Cliente = {
   id: string;
   nome: string;
@@ -15,11 +18,35 @@ export type Cliente = {
   distancia_metros?: number | null;
 };
 
+export type ClienteSugestao = {
+  cliente: Cliente;
+  confianca: ConfiancaGps;
+};
+
+/** Body for `POST /clientes` with GPS capture metadata from the vendedor cadastro flow. */
+export type ClienteCadastroPayload = {
+  nome: string;
+  latitude: number;
+  longitude: number;
+  gps_accuracy_media: number;
+  gps_accuracy_min: number;
+  gps_amostras: number;
+};
+
 export type ClienteMaisProximoResponse = {
   tem_clientes: boolean;
   raio_busca_metros: number;
   distancia_metros?: number | null;
   cliente?: Cliente | null;
+};
+
+/** Campos extras aceitos por `POST /registros` (auditoria / aprendizado). */
+export type RegistroCreateMetadata = {
+  gps_accuracy_registro?: number | null;
+  gps_source?: GpsSource | null;
+  cliente_sugerido_id?: string | null;
+  candidatos_ids?: string[] | null;
+  aprendizado_permitido?: boolean | null;
 };
 
 export type Registro = {

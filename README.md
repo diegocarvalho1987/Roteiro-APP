@@ -14,6 +14,8 @@ Sistema web mobile-first para controle de distribuição de pães: vendedor regi
 
 Siga [`docs/SHEETS_SETUP.md`](docs/SHEETS_SETUP.md): crie as abas `clientes` e `registros` com os cabeçalhos do PRD, compartilhe a planilha com o e-mail da service account.
 
+Se quiser habilitar histórico GPS e recalibração gradual de coordenadas, crie também a aba opcional `cliente_localizacoes`. Sem essa aba, o backend continua aceitando `POST /clientes` e `POST /registros`, mas não aprende nem recalcula posições automaticamente.
+
 ### Backend
 
 ```bash
@@ -36,6 +38,13 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 | `CORS_ORIGINS` | Origens permitidas, separadas por vírgula (ex.: `https://roteiro-app-one.vercel.app`) |
 | `CORS_ORIGIN_REGEX` | (Opcional) Regex extra, ex. previews Vercel: `https://.*\.vercel\.app` |
 | `CLIENTES_RAIO_METROS` | (Opcional) Raio em metros para sugerir cliente pelo GPS (padrão **100**; máx. 10 000) |
+| `CLIENTES_SUGESTOES_LIMITE` | (Opcional) Quantidade máxima de itens em `GET /clientes/sugestoes` |
+| `GPS_ACCURACY_BOA_M` | (Opcional) Accuracy máxima para uma observação entrar como confiável no aprendizado |
+| `GPS_CONFIANCA_ALTA_M` / `GPS_CONFIANCA_MEDIA_M` | (Opcional) Limiares de confiança das sugestões de cliente |
+| `GPS_APRENDIZADO_SALTO_MAX_M` | (Opcional) Descarta observações distantes demais do centro atual do cliente |
+| `GPS_APRENDIZADO_MOVE_MAX_M` | (Opcional) Limita o deslocamento aplicado por atualização de aprendizado |
+| `GPS_APRENDIZADO_MIN_OBS` | (Opcional) Mínimo de observações confiáveis para recalibrar |
+| `GPS_WARM_TIMEOUT_MS` | (Opcional) Preparação para o fluxo progressivo de GPS no frontend; ainda não altera a API atual |
 | `VENDEDOR_EMAIL` / `PROPRIETARIA_EMAIL` | Logins |
 | `VENDEDOR_PASSWORD_HASH` / `PROPRIETARIA_PASSWORD_HASH` | Hash bcrypt (recomendado) |
 
@@ -99,11 +108,12 @@ O arquivo [`frontend/vercel.json`](frontend/vercel.json) reescreve rotas para o 
 
 - `POST /auth/login` — `{ "email", "senha" }`
 - `GET /clientes` — ativos; `?incluir_inativos=true` (proprietária)
-- `GET /clientes/proximos?lat=&lng=` — raio 100 m
+- `GET /clientes/proximos?lat=&lng=` — raio configurável por `CLIENTES_RAIO_METROS` (padrão 100 m)
+- `GET /clientes/sugestoes?lat=&lng=` — ranking dos clientes mais próximos com confiança (`alta`/`media`/`baixa`)
 - `POST /clientes` — vendedor
 - `PATCH /clientes/{id}` — proprietária
 - `GET /registros` — filtros opcionais; vendedor: últimos 30 por padrão
-- `POST /registros` — vendedor (duplicata mesmo dia → 409)
+- `POST /registros` — vendedor (duplicata mesmo dia → 409); registra metadados GPS e pode alimentar aprendizado gradual se `cliente_localizacoes` estiver disponível
 - `GET /registros/dashboard` — proprietária
 - `GET /registros/resumo-semanal?ano=&semana=` — proprietária (semana ISO)
 

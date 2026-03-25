@@ -2,7 +2,7 @@ import base64
 import json
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from exceptions import ServiceAccountConfigError
@@ -38,12 +38,30 @@ class Settings(BaseSettings):
     # Raio (m) para sugerir cliente automaticamente em /clientes/proximos (padrão 100).
     clientes_raio_metros: float = Field(default=100.0, ge=10.0, le=10_000.0)
 
+    # GPS / sugestões de cliente (contratos e limiares)
+    clientes_sugestoes_limite: int = Field(default=3, ge=1)
+    gps_warm_timeout_ms: int = Field(default=8000, ge=1)
+    gps_accuracy_boa_m: float = Field(default=100.0, gt=0)
+    gps_confianca_alta_m: float = Field(default=120.0, gt=0)
+    gps_confianca_media_m: float = Field(default=300.0, gt=0)
+    gps_aprendizado_salto_max_m: float = Field(default=500.0, gt=0)
+    gps_aprendizado_move_max_m: float = Field(default=30.0, gt=0)
+    gps_aprendizado_min_obs: int = Field(default=3, ge=1)
+
     @field_validator("clientes_raio_metros", mode="before")
     @classmethod
     def _coerce_raio(cls, v: object) -> object:
         if v is None or v == "":
             return 100.0
         return v
+
+    @model_validator(mode="after")
+    def _validate_gps_thresholds(self) -> "Settings":
+        if self.gps_confianca_alta_m > self.gps_confianca_media_m:
+            raise ValueError("gps_confianca_alta_m deve ser menor ou igual a gps_confianca_media_m")
+        if self.gps_aprendizado_move_max_m > self.gps_aprendizado_salto_max_m:
+            raise ValueError("gps_aprendizado_move_max_m deve ser menor ou igual a gps_aprendizado_salto_max_m")
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useWarmLocation } from '../hooks/useWarmLocation';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex-1 text-center py-3 text-sm font-medium rounded-lg ${
@@ -8,6 +9,8 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function VendedorLayout() {
   const { logout } = useAuth();
+  useWarmLocation();
+
   return (
     <div className="min-h-screen flex flex-col bg-amber-50">
       <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-white/90 backdrop-blur border-b border-amber-200">
