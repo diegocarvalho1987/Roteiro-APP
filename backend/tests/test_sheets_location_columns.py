@@ -114,6 +114,24 @@ def test_row_to_registro_audit_columns_and_candidatos_csv() -> None:
     assert r["aprendizado_permitido"] is True
 
 
+def test_list_clientes_raw_short_header_row_reads_gps_columns_positionally(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Linha 1 só até F (Google corta células vazias); dados em G–J como no cadastro pelo app."""
+    headers_short = ["id", "nome", "latitude", "longitude", "ativo", "criado_em"]
+    data_row = ["c1", "Loja", "-29.7", "-51.2", "TRUE", "2025-01-01", "9,47", "9,47", "2", "2026-03-25 10:30:00"]
+
+    class _WS:
+        def get_all_values(self):
+            return [headers_short, data_row]
+
+    monkeypatch.setattr(sheets, "_ws_clientes", lambda: _WS())
+    out = sheets.list_clientes_raw()
+    assert len(out) == 1
+    assert out[0]["gps_accuracy_media"] == 9.47
+    assert out[0]["gps_accuracy_min"] == 9.47
+    assert out[0]["gps_amostras"] == 2
+    assert out[0]["gps_atualizado_em"].startswith("2026-03-25")
+
+
 def test_list_clientes_raw_tolerates_duplicate_header_names(monkeypatch: pytest.MonkeyPatch) -> None:
     """Planilhas com cabeçalho repetido (ex.: latitude duas vezes) não devem derrubar /clientes/sugestoes."""
     headers = [

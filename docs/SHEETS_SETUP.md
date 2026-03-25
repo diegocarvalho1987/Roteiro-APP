@@ -38,6 +38,8 @@ Ordem exata (nomes em minúsculas recomendados; o backend normaliza e aceita `VE
 
 `id` · `nome` · `latitude` · `longitude` · `ativo` · `criado_em` · `gps_accuracy_media` · `gps_accuracy_min` · `gps_amostras` · `gps_atualizado_em`
 
+**Cabeçalho incompleto (G–J vazios):** se a linha 1 tiver só até `criado_em` (coluna F) mas existirem dados de GPS nas colunas G–J, preencha **obrigatoriamente** na linha 1 as células **G1** a **J1** com os quatro nomes acima. Cabeçalhos vazios repetidos confundem leitores de planilha; o backend tenta mapear por posição quando a linha 1 está em branco nessas colunas, mas manter os títulos evita ambiguidade e ferramentas (ex.: `gspread.get_all_records`) quebram com várias colunas “sem nome”.
+
 - `ativo`: use `TRUE` / `FALSE` ou, em planilha em português, **`VERDADEIRO` / `FALSO`** (o backend aceita). Célula vazia = inativo.
 - Cabeçalhos podem ter maiúsculas (`Latitude`, `ID`); o backend normaliza para minúsculas. Evite nomes diferentes de `latitude` / `longitude` (ex.: só `lat`).
 - `latitude` / `longitude`: número decimal com ponto (ex: `-29.123456`).

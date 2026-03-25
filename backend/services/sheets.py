@@ -123,13 +123,18 @@ CLIENTE_LOCALIZACOES_CANONICAL_HEADERS: list[str] = [
 
 def _sheet_values_to_records(values: list[list[Any]], canonical_headers: list[str]) -> list[dict[str, Any]]:
     """
-    Monta registros a partir de get_all_values, tolerando cabeçalhos repetidos na planilha
-    (gspread.get_all_records falha nesse caso). Cada campo canônico usa a primeira coluna
-    ainda não consumida cujo cabeçalho normalizado é igual ao esperado.
+    Monta registros a partir de get_all_values, tolerando:
+    - cabeçalhos repetidos (gspread.get_all_records falha nesse caso);
+    - linha 1 mais curta que as linhas de dados (Google omite células vazias no fim);
+    - células de cabeçalho vazias nas colunas G–J etc.: usa posição (índice = ordem do contrato)
+      quando o nome não foi encontrado e o cabeçalho naquela coluna está vazio.
     """
     if not values or not values[0]:
         return []
-    raw_headers = values[0]
+    max_cols = max(len(values[0]), max((len(r) for r in values[1:]), default=0))
+    raw_headers = list(values[0])
+    while len(raw_headers) < max_cols:
+        raw_headers.append("")
     norm_headers = [_normalize_header_name(h) for h in raw_headers]
     norm_canonical = [_normalize_header_name(h) for h in canonical_headers]
 
@@ -138,11 +143,24 @@ def _sheet_values_to_records(values: list[list[Any]], canonical_headers: list[st
     for want in norm_canonical:
         idx: int | None = None
         for j, h in enumerate(norm_headers):
-            if h == want and j not in consumed:
+            if h == want and h != "" and j not in consumed:
                 idx = j
                 consumed.add(j)
                 break
         col_for_field.append(idx)
+
+    # Fallback posicional: comum quando alguém preenche GPS nas colunas certas mas esquece os títulos na linha 1.
+    for fi in range(len(canonical_headers)):
+        if col_for_field[fi] is not None:
+            continue
+        if fi >= len(norm_headers):
+            continue
+        if norm_headers[fi] != "":
+            continue
+        if fi in consumed:
+            continue
+        col_for_field[fi] = fi
+        consumed.add(fi)
 
     records: list[dict[str, Any]] = []
     for row in values[1:]:
