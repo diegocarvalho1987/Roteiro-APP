@@ -114,6 +114,38 @@ def test_row_to_registro_audit_columns_and_candidatos_csv() -> None:
     assert r["aprendizado_permitido"] is True
 
 
+def test_list_clientes_raw_tolerates_duplicate_header_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Planilhas com cabeçalho repetido (ex.: latitude duas vezes) não devem derrubar /clientes/sugestoes."""
+    headers = [
+        "id",
+        "nome",
+        "latitude",
+        "longitude",
+        "latitude",
+        "ativo",
+        "criado_em",
+        "gps_accuracy_media",
+        "gps_accuracy_min",
+        "gps_amostras",
+        "gps_atualizado_em",
+    ]
+    data_row = ["c1", "Loja", "-29.7", "-51.2", "JUNK", "TRUE", "2025-01-01", "10", "8", "2", ""]
+
+    class _WS:
+        def get_all_values(self):
+            return [headers, data_row]
+
+    monkeypatch.setattr(sheets, "_ws_clientes", lambda: _WS())
+    out = sheets.list_clientes_raw()
+    assert len(out) == 1
+    assert out[0]["id"] == "c1"
+    assert out[0]["nome"] == "Loja"
+    assert out[0]["latitude"] == -29.7
+    assert out[0]["longitude"] == -51.2
+    assert out[0]["ativo"] is True
+    assert out[0]["gps_amostras"] == 2
+
+
 def test_append_cliente_row_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[list] = []
 
@@ -249,12 +281,12 @@ def test_cliente_localizacoes_round_trip(monkeypatch: pytest.MonkeyPatch) -> Non
     rows_appended: list[list] = []
 
     class _WS:
-        def get_all_records(self):
+        def get_all_values(self):
             headers = ["id", "cliente_id", "latitude", "longitude", "origem", "confiavel", "accuracy", "criado_em"]
-            data = []
+            rows: list[list] = [headers]
             for raw in rows_appended:
-                data.append(dict(zip(headers, [str(x) for x in raw], strict=True)))
-            return data
+                rows.append([str(x) for x in raw])
+            return rows
 
         def append_row(self, row, value_input_option=None):
             rows_appended.append(list(row))

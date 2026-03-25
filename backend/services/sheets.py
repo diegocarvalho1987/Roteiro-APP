@@ -75,6 +75,89 @@ def _norm_keys(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+# Ordem do contrato (append_row); leitura usa a primeira coluna cujo cabeçalho normalizado coincide.
+CLIENTES_CANONICAL_HEADERS: list[str] = [
+    "id",
+    "nome",
+    "latitude",
+    "longitude",
+    "ativo",
+    "criado_em",
+    "gps_accuracy_media",
+    "gps_accuracy_min",
+    "gps_amostras",
+    "gps_atualizado_em",
+]
+
+REGISTROS_CANONICAL_HEADERS: list[str] = [
+    "id",
+    "cliente_id",
+    "cliente_nome",
+    "deixou",
+    "tinha",
+    "trocas",
+    "vendido",
+    "data",
+    "hora",
+    "latitude_registro",
+    "longitude_registro",
+    "registrado_por",
+    "gps_accuracy_registro",
+    "gps_source",
+    "cliente_sugerido_id",
+    "candidatos_ids",
+    "aprendizado_permitido",
+]
+
+CLIENTE_LOCALIZACOES_CANONICAL_HEADERS: list[str] = [
+    "id",
+    "cliente_id",
+    "latitude",
+    "longitude",
+    "origem",
+    "confiavel",
+    "accuracy",
+    "criado_em",
+]
+
+
+def _sheet_values_to_records(values: list[list[Any]], canonical_headers: list[str]) -> list[dict[str, Any]]:
+    """
+    Monta registros a partir de get_all_values, tolerando cabeçalhos repetidos na planilha
+    (gspread.get_all_records falha nesse caso). Cada campo canônico usa a primeira coluna
+    ainda não consumida cujo cabeçalho normalizado é igual ao esperado.
+    """
+    if not values or not values[0]:
+        return []
+    raw_headers = values[0]
+    norm_headers = [_normalize_header_name(h) for h in raw_headers]
+    norm_canonical = [_normalize_header_name(h) for h in canonical_headers]
+
+    col_for_field: list[int | None] = []
+    consumed: set[int] = set()
+    for want in norm_canonical:
+        idx: int | None = None
+        for j, h in enumerate(norm_headers):
+            if h == want and j not in consumed:
+                idx = j
+                consumed.add(j)
+                break
+        col_for_field.append(idx)
+
+    records: list[dict[str, Any]] = []
+    for row in values[1:]:
+        d: dict[str, Any] = {}
+        for field, j in zip(canonical_headers, col_for_field, strict=True):
+            if j is None:
+                d[field] = ""
+            elif j < len(row):
+                d[field] = row[j]
+            else:
+                d[field] = ""
+        records.append(d)
+    return records
+
+
 @lru_cache
 def _gc() -> gspread.Client:
     s = get_settings()
@@ -173,7 +256,7 @@ def row_to_cliente_localizacao(row: dict[str, Any]) -> dict[str, Any]:
 
 def list_clientes_raw() -> list[dict[str, Any]]:
     ws = _ws_clientes()
-    records = ws.get_all_records()
+    records = _sheet_values_to_records(ws.get_all_values(), CLIENTES_CANONICAL_HEADERS)
     # Não filtrar com r.get("id") no dict bruto: cabeçalho "Id" ou "\ufeffid" quebra e some a linha.
     out: list[dict[str, Any]] = []
     for r in records:
@@ -309,7 +392,7 @@ def update_cliente(
 
 def list_registros_raw() -> list[dict[str, Any]]:
     ws = _ws_registros()
-    records = ws.get_all_records()
+    records = _sheet_values_to_records(ws.get_all_values(), REGISTROS_CANONICAL_HEADERS)
     out: list[dict[str, Any]] = []
     for r in records:
         reg = row_to_registro(r)
@@ -396,7 +479,7 @@ def list_cliente_localizacoes_raw() -> list[dict[str, Any]]:
     ws = _try_ws_cliente_localizacoes()
     if ws is None:
         return []
-    records = ws.get_all_records()
+    records = _sheet_values_to_records(ws.get_all_values(), CLIENTE_LOCALIZACOES_CANONICAL_HEADERS)
     out: list[dict[str, Any]] = []
     for r in records:
         loc = row_to_cliente_localizacao(r)
