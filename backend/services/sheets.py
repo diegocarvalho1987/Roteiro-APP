@@ -126,8 +126,9 @@ def _sheet_values_to_records(values: list[list[Any]], canonical_headers: list[st
     Monta registros a partir de get_all_values, tolerando:
     - cabeçalhos repetidos (gspread.get_all_records falha nesse caso);
     - linha 1 mais curta que as linhas de dados (Google omite células vazias no fim);
-    - células de cabeçalho vazias nas colunas G–J etc.: usa posição (índice = ordem do contrato)
-      quando o nome não foi encontrado e o cabeçalho naquela coluna está vazio.
+    - células de cabeçalho vazias: usa posição (índice = ordem do contrato) quando o nome não casou;
+    - cabeçalho digitado errado ou desconhecido na coluna fi (ex. ``iente_id`` em A1): usa posição fi
+      desde que o texto não seja exatamente outro nome canônico válido (evita confundir colunas nomeadas).
     """
     if not values or not values[0]:
         return []
@@ -149,7 +150,7 @@ def _sheet_values_to_records(values: list[list[Any]], canonical_headers: list[st
                 break
         col_for_field.append(idx)
 
-    # Fallback posicional: comum quando alguém preenche GPS nas colunas certas mas esquece os títulos na linha 1.
+    # Fallback posicional: cabeçalho vazio na coluna fi (dados alinhados ao contrato append_row).
     for fi in range(len(canonical_headers)):
         if col_for_field[fi] is not None:
             continue
@@ -158,6 +159,25 @@ def _sheet_values_to_records(values: list[list[Any]], canonical_headers: list[st
         if norm_headers[fi] != "":
             continue
         if fi in consumed:
+            continue
+        col_for_field[fi] = fi
+        consumed.add(fi)
+
+    canonical_name_set = set(norm_canonical)
+    for fi in range(len(canonical_headers)):
+        if col_for_field[fi] is not None:
+            continue
+        if fi >= len(norm_headers) or fi in consumed:
+            continue
+        h = norm_headers[fi]
+        if h == "":
+            continue
+        want = norm_canonical[fi]
+        if h == want:
+            col_for_field[fi] = fi
+            consumed.add(fi)
+            continue
+        if h in canonical_name_set:
             continue
         col_for_field[fi] = fi
         consumed.add(fi)

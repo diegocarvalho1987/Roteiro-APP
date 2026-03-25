@@ -50,9 +50,11 @@ Ordem exata (nomes em minúsculas recomendados; o backend normaliza e aceita `VE
 
 ### Aba `registros` — linha 1 (cabeçalhos)
 
-Ordem exata:
+Ordem exata (colunas **A–Q**):
 
 `id` · `cliente_id` · `cliente_nome` · `deixou` · `tinha` · `trocas` · `vendido` · `data` · `hora` · `latitude_registro` · `longitude_registro` · `registrado_por` · `gps_accuracy_registro` · `gps_source` · `cliente_sugerido_id` · `candidatos_ids` · `aprendizado_permitido`
+
+**Cabeçalho incompleto ou errado:** confira **A1 = `id`** e **B1 = `cliente_id`** (não corte o texto). Preencha **M1–Q1** com os cinco nomes acima (`gps_accuracy_registro` … `aprendizado_permitido`) se houver dados nessas colunas. Cabeçalhos vazios repetidos na linha 1 atrapalham exportações e leitores de planilha; o backend tenta alinhar por posição quando o texto da célula não é um nome canônico conhecido, mas o ideal é corrigir a linha 1.
 
 - `data`: `YYYY-MM-DD`
 - `hora`: `HH:MM:SS`

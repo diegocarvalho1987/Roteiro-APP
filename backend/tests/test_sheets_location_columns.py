@@ -114,6 +114,66 @@ def test_row_to_registro_audit_columns_and_candidatos_csv() -> None:
     assert r["aprendizado_permitido"] is True
 
 
+def test_list_registros_raw_typo_and_blank_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A1 errado (ex.: iente_id), B1 e M–Q vazios — comum na aba registros incompleta."""
+    rid = "11111111-1111-1111-1111-111111111111"
+    cid = "22222222-2222-2222-2222-222222222222"
+    headers = [
+        "iente_id",
+        "",
+        "cliente_nome",
+        "deixou",
+        "tinha",
+        "trocas",
+        "vendido",
+        "data",
+        "hora",
+        "latitude_registro",
+        "longitude_registro",
+        "registrado_por",
+        "",
+        "",
+        "",
+        "",
+        "",
+    ]
+    data_row = [
+        rid,
+        cid,
+        "Padaria",
+        1,
+        0,
+        0,
+        1,
+        "2026-03-25",
+        "10:00:00",
+        -29.7,
+        -51.2,
+        "v@x.com",
+        "16,6",
+        "live",
+        cid,
+        "a, b",
+        "TRUE",
+    ]
+
+    class _WS:
+        def get_all_values(self):
+            return [headers, data_row]
+
+    monkeypatch.setattr(sheets, "_ws_registros", lambda: _WS())
+    out = sheets.list_registros_raw()
+    assert len(out) == 1
+    assert out[0]["id"] == rid
+    assert out[0]["cliente_id"] == cid
+    assert out[0]["cliente_nome"] == "Padaria"
+    assert out[0]["gps_accuracy_registro"] == 16.6
+    assert out[0]["gps_source"] == "live"
+    assert out[0]["cliente_sugerido_id"] == cid
+    assert out[0]["candidatos_ids"] == ["a", "b"]
+    assert out[0]["aprendizado_permitido"] is True
+
+
 def test_list_clientes_raw_short_header_row_reads_gps_columns_positionally(monkeypatch: pytest.MonkeyPatch) -> None:
     """Linha 1 só até F (Google corta células vazias); dados em G–J como no cadastro pelo app."""
     headers_short = ["id", "nome", "latitude", "longitude", "ativo", "criado_em"]
