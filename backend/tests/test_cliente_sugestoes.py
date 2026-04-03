@@ -2,9 +2,11 @@ import importlib
 import logging
 import sys
 import types
+from datetime import date, datetime
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from config import Settings
@@ -1130,3 +1132,182 @@ def test_criar_registro_payload_tampered_nao_aprende_nem_persiste_opt_in(
     assert append_registro_kw["aprendizado_permitido"] is False
     assert loc_kw["confiavel"] is False
     assert update_called is False
+
+
+def test_registro_atrasado_persiste_data_fixa_hora_sem_localizacao(
+    settings_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import config as config_module
+
+    config_module.get_settings.cache_clear()
+    sheets, _, registros = _import_route_modules()
+
+    class _FixedDateTime:
+        @staticmethod
+        def now(tz):
+            return datetime(2026, 4, 3, 10, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr(registros, "datetime", _FixedDateTime)
+
+    monkeypatch.setattr(
+        sheets,
+        "get_cliente_by_id",
+        lambda cid: {
+            "id": cid,
+            "nome": "Cliente",
+            "latitude": -23.0,
+            "longitude": -46.0,
+            "ativo": True,
+            "criado_em": "2025-01-01 00:00:00",
+            "gps_accuracy_media": 0.0,
+            "gps_accuracy_min": 0.0,
+            "gps_amostras": 0,
+            "gps_atualizado_em": "",
+        },
+    )
+    monkeypatch.setattr(sheets, "existe_registro_mesmo_dia", lambda **kwargs: False)
+    append_registro_kw: dict = {}
+
+    def fake_append_registro(**kwargs: object) -> dict:
+        append_registro_kw.update(kwargs)
+        return {
+            "id": "r-atraso",
+            "cliente_id": "c1",
+            "cliente_nome": "Cliente",
+            "deixou": 1,
+            "tinha": 0,
+            "trocas": 0,
+            "vendido": 1,
+            "data": kwargs.get("data_s", "2026-04-01"),
+            "hora": kwargs.get("hora_s", "12:00:00"),
+            "latitude_registro": -23.0,
+            "longitude_registro": -46.0,
+            "registrado_por": "vendedor@example.com",
+            "gps_accuracy_registro": 0.0,
+            "gps_source": "",
+            "cliente_sugerido_id": "",
+            "candidatos_ids": [],
+            "aprendizado_permitido": False,
+        }
+
+    append_loc_called = False
+
+    def fake_append_loc(**kwargs: object) -> dict:
+        nonlocal append_loc_called
+        append_loc_called = True
+        return {"id": "L1", **{k: v for k, v in kwargs.items()}}
+
+    monkeypatch.setattr(sheets, "append_registro", fake_append_registro)
+    monkeypatch.setattr(sheets, "append_cliente_localizacao", fake_append_loc)
+
+    out = registros.criar_registro(
+        RegistroCreate(
+            cliente_id="c1",
+            deixou=1,
+            tinha=0,
+            trocas=0,
+            latitude_registro=-23.0,
+            longitude_registro=-46.0,
+            data_entrega=date(2026, 4, 1),
+        ),
+        {"sub": "vendedor@example.com", "perfil": "vendedor"},
+    )
+
+    assert out.id == "r-atraso"
+    assert append_registro_kw["data_s"] == "2026-04-01"
+    assert append_registro_kw["hora_s"] == "12:00:00"
+    assert append_registro_kw["cliente_sugerido_id"] is None
+    assert append_registro_kw["candidatos_ids"] == []
+    assert append_registro_kw["aprendizado_permitido"] is False
+    assert append_loc_called is False
+
+
+def test_registro_atrasado_rejeita_data_futura(settings_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    import config as config_module
+
+    config_module.get_settings.cache_clear()
+    sheets, _, registros = _import_route_modules()
+
+    class _FixedDateTime:
+        @staticmethod
+        def now(tz):
+            return datetime(2026, 4, 3, 10, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr(registros, "datetime", _FixedDateTime)
+    monkeypatch.setattr(
+        sheets,
+        "get_cliente_by_id",
+        lambda cid: {
+            "id": cid,
+            "nome": "Cliente",
+            "latitude": -23.0,
+            "longitude": -46.0,
+            "ativo": True,
+            "criado_em": "2025-01-01 00:00:00",
+            "gps_accuracy_media": 0.0,
+            "gps_accuracy_min": 0.0,
+            "gps_amostras": 0,
+            "gps_atualizado_em": "",
+        },
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        registros.criar_registro(
+            RegistroCreate(
+                cliente_id="c1",
+                deixou=1,
+                tinha=0,
+                trocas=0,
+                latitude_registro=-23.0,
+                longitude_registro=-46.0,
+                data_entrega=date(2026, 4, 4),
+            ),
+            {"sub": "vendedor@example.com", "perfil": "vendedor"},
+        )
+    assert exc_info.value.status_code == 400
+
+
+def test_registro_atrasado_conflito_mesmo_dia(settings_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    import config as config_module
+
+    config_module.get_settings.cache_clear()
+    sheets, _, registros = _import_route_modules()
+
+    class _FixedDateTime:
+        @staticmethod
+        def now(tz):
+            return datetime(2026, 4, 3, 10, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr(registros, "datetime", _FixedDateTime)
+    monkeypatch.setattr(
+        sheets,
+        "get_cliente_by_id",
+        lambda cid: {
+            "id": cid,
+            "nome": "Cliente",
+            "latitude": -23.0,
+            "longitude": -46.0,
+            "ativo": True,
+            "criado_em": "2025-01-01 00:00:00",
+            "gps_accuracy_media": 0.0,
+            "gps_accuracy_min": 0.0,
+            "gps_amostras": 0,
+            "gps_atualizado_em": "",
+        },
+    )
+    monkeypatch.setattr(sheets, "existe_registro_mesmo_dia", lambda **kwargs: True)
+
+    with pytest.raises(HTTPException) as exc_info:
+        registros.criar_registro(
+            RegistroCreate(
+                cliente_id="c1",
+                deixou=1,
+                tinha=0,
+                trocas=0,
+                latitude_registro=-23.0,
+                longitude_registro=-46.0,
+                data_entrega=date(2026, 4, 1),
+            ),
+            {"sub": "vendedor@example.com", "perfil": "vendedor"},
+        )
+    assert exc_info.value.status_code == 409

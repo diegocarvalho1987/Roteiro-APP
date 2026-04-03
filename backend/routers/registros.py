@@ -78,16 +78,23 @@ def criar_registro(
     if not cliente["ativo"]:
         raise HTTPException(status_code=400, detail="Cliente inativo")
 
-    hoje = datetime.now(TZ).strftime("%Y-%m-%d")
+    hoje_sp = datetime.now(TZ).date()
+    data_registro = body.data_entrega if body.data_entrega is not None else hoje_sp
+    if data_registro > hoje_sp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Data da entrega não pode ser no futuro.",
+        )
+    data_s = data_registro.strftime("%Y-%m-%d")
     registrado_por = user["sub"].strip().lower()
     if sheets.existe_registro_mesmo_dia(
         cliente_id=body.cliente_id,
-        data=hoje,
+        data=data_s,
         registrado_por=registrado_por,
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Já existe registro para este cliente hoje.",
+            detail="Já existe registro para este cliente nesta data.",
         )
 
     vendido = body.deixou - body.tinha + body.trocas
@@ -96,31 +103,37 @@ def criar_registro(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Valores inconsistentes: vendido não pode ser negativo (deixou - tinha + trocas).",
         )
+    registro_atrasado = body.data_entrega is not None
+    hora_fixa_atrasado = "12:00:00" if registro_atrasado else None
+
     settings = None
     candidatos_servidor_ids: list[str] = []
     cliente_sugerido_servidor_id: str | None = None
     cliente_sugerido_servidor_distancia_m: float | None = None
     aprendizado_efetivo = False
-    try:
-        settings = get_settings()
-        limite = settings.clientes_sugestoes_limite
-        candidatos_servidor = ranked_sugestao_candidates(body.latitude_registro, body.longitude_registro)[:limite]
-        candidatos_servidor_ids = [c["id"] for _, c in candidatos_servidor]
-        if candidatos_servidor:
-            cliente_sugerido_servidor_distancia_m = candidatos_servidor[0][0]
-            cliente_sugerido_servidor_id = candidatos_servidor[0][1]["id"]
-        aprendizado_efetivo = location_learning.observacao_confiavel_para_aprendizado(
-            body.cliente_id,
-            cliente_sugerido_servidor_id,
-            cliente_sugerido_servidor_distancia_m,
-            body.aprendizado_permitido,
-            body.gps_source,
-            body.gps_accuracy_registro,
-            settings,
-        )
-    except Exception:
-        logger.warning("Falha ao preparar aprendizado de localizacao do cliente.", exc_info=True)
-        aprendizado_efetivo = False
+    if not registro_atrasado:
+        try:
+            settings = get_settings()
+            limite = settings.clientes_sugestoes_limite
+            candidatos_servidor = ranked_sugestao_candidates(body.latitude_registro, body.longitude_registro)[
+                :limite
+            ]
+            candidatos_servidor_ids = [c["id"] for _, c in candidatos_servidor]
+            if candidatos_servidor:
+                cliente_sugerido_servidor_distancia_m = candidatos_servidor[0][0]
+                cliente_sugerido_servidor_id = candidatos_servidor[0][1]["id"]
+            aprendizado_efetivo = location_learning.observacao_confiavel_para_aprendizado(
+                body.cliente_id,
+                cliente_sugerido_servidor_id,
+                cliente_sugerido_servidor_distancia_m,
+                body.aprendizado_permitido,
+                body.gps_source,
+                body.gps_accuracy_registro,
+                settings,
+            )
+        except Exception:
+            logger.warning("Falha ao preparar aprendizado de localizacao do cliente.", exc_info=True)
+            aprendizado_efetivo = False
 
     r = sheets.append_registro(
         cliente_id=body.cliente_id,
@@ -137,7 +150,12 @@ def criar_registro(
         cliente_sugerido_id=cliente_sugerido_servidor_id,
         candidatos_ids=candidatos_servidor_ids,
         aprendizado_permitido=aprendizado_efetivo,
+        data_s=data_s,
+        hora_s=hora_fixa_atrasado,
     )
+
+    if registro_atrasado:
+        return _to_registro_response(r)
 
     try:
         loc_atual = sheets.append_cliente_localizacao(

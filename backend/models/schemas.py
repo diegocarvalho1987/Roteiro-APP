@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -72,6 +73,10 @@ class RegistroCreate(BaseModel):
     trocas: int = Field(ge=0)
     latitude_registro: float
     longitude_registro: float
+    data_entrega: date | None = Field(
+        default=None,
+        description="Data da visita em registro atrasado (sem GPS); horário fixado no servidor.",
+    )
     # Metadados opcionais para auditoria / aprendizado de posição.
     gps_accuracy_registro: float | None = Field(default=None, ge=0)
     gps_source: GpsSource | None = None

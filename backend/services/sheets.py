@@ -461,11 +461,13 @@ def append_registro(
     cliente_sugerido_id: str | None = None,
     candidatos_ids: list[str] | None = None,
     aprendizado_permitido: bool | None = None,
+    data_s: str | None = None,
+    hora_s: str | None = None,
 ) -> dict[str, Any]:
     rid = str(uuid.uuid4())
     now = _now_sp()
-    data_s = now.strftime("%Y-%m-%d")
-    hora_s = now.strftime("%H:%M:%S")
+    data_s = data_s if data_s is not None else now.strftime("%Y-%m-%d")
+    hora_s = hora_s if hora_s is not None else now.strftime("%H:%M:%S")
     ap_cell = ""
     if aprendizado_permitido is True:
         ap_cell = "TRUE"
