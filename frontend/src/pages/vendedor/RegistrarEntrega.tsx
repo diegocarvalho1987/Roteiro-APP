@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { formatInTimeZone } from 'date-fns-tz';
 import { api } from '../../services/api';
 import type {
   Cliente,
@@ -14,7 +16,11 @@ import {
   labelConfianca,
 } from '../../utils/locationRanking';
 
-type Phase = 'start' | 'gps' | 'confirm' | 'pick' | 'form';
+type Phase = 'start' | 'gps' | 'confirm' | 'pick' | 'late_pick' | 'form';
+
+function hojeBrasilia(): string {
+  return formatInTimeZone(new Date(), 'America/Sao_Paulo', 'yyyy-MM-dd');
+}
 
 type CoordsRegistro = {
   latitude: number;
@@ -23,12 +29,16 @@ type CoordsRegistro = {
 };
 
 export default function RegistrarEntrega() {
+  const [searchParams] = useSearchParams();
   const { getPosition, loading: gpsLoading, error: gpsError, clearError } = useGeolocalizacao();
   const gpsFlowIdRef = useRef(0);
   const fallbackRequestIdRef = useRef(0);
   const [phase, setPhase] = useState<Phase>('start');
+  const [registroAtrasado, setRegistroAtrasado] = useState(false);
+  const [dataEntregaAtrasada, setDataEntregaAtrasada] = useState(() => hojeBrasilia());
   const [coords, setCoords] = useState<CoordsRegistro | null>(null);
   const [todosClientes, setTodosClientes] = useState<Cliente[]>([]);
+  const [clientesCarregando, setClientesCarregando] = useState(false);
   const [sugestoes, setSugestoes] = useState<ClienteSugestao[]>([]);
   const [gpsSource, setGpsSource] = useState<GpsSource | null>(null);
   const [clienteSugeridoId, setClienteSugeridoId] = useState<string | null>(null);
@@ -52,10 +62,12 @@ export default function RegistrarEntrega() {
   }, []);
 
   useEffect(() => {
-    if (phase === 'pick' && todosClientes.length === 0) {
+    if ((phase === 'pick' || phase === 'late_pick') && todosClientes.length === 0) {
+      setClientesCarregando(true);
       api<Cliente[]>('/clientes')
         .then(setTodosClientes)
-        .catch((e) => setErr(e instanceof Error ? e.message : 'Erro ao carregar clientes'));
+        .catch((e) => setErr(e instanceof Error ? e.message : 'Erro ao carregar clientes'))
+        .finally(() => setClientesCarregando(false));
     }
   }, [phase, todosClientes.length]);
 
@@ -63,6 +75,26 @@ export default function RegistrarEntrega() {
     gpsFlowIdRef.current += 1;
     fallbackRequestIdRef.current += 1;
   }
+
+  useEffect(() => {
+    if (searchParams.get('atrasado') !== '1') return;
+    gpsFlowIdRef.current += 1;
+    fallbackRequestIdRef.current += 1;
+    setRegistroAtrasado(true);
+    setDataEntregaAtrasada(hojeBrasilia());
+    setPhase('late_pick');
+    setErr(null);
+    setMsg(null);
+    setGpsAviso(null);
+    setCoords(null);
+    setSugestoes([]);
+    setGpsSource(null);
+    setClienteSugeridoId(null);
+    setCandidatosIds([]);
+    setPickFromSuggestions(false);
+    setSelected(null);
+    setGpsFallbackInfo(null);
+  }, [searchParams]);
 
   function publicarSugestoes(
     flowId: number,
@@ -222,8 +254,28 @@ export default function RegistrarEntrega() {
     setPhase('form');
   }
 
+  function iniciarRegistroAtrasado() {
+    invalidarFluxoGps();
+    setRegistroAtrasado(true);
+    setDataEntregaAtrasada(hojeBrasilia());
+    setErr(null);
+    setMsg(null);
+    setGpsAviso(null);
+    setCoords(null);
+    setSugestoes([]);
+    setGpsSource(null);
+    setClienteSugeridoId(null);
+    setCandidatosIds([]);
+    setPickFromSuggestions(false);
+    setSelected(null);
+    setGpsFallbackInfo(null);
+    setPhase('late_pick');
+  }
+
   function resetCamposEntrega(preserveMsg: boolean) {
     invalidarFluxoGps();
+    setRegistroAtrasado(false);
+    setDataEntregaAtrasada(hojeBrasilia());
     setPhase('start');
     setCoords(null);
     setSugestoes([]);
@@ -247,28 +299,47 @@ export default function RegistrarEntrega() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!selected || !coords) {
+    if (!selected) {
+      setErr('Selecione o cliente.');
+      return;
+    }
+    if (!registroAtrasado && !coords) {
       setErr('Cliente ou GPS ausente.');
       return;
+    }
+    if (registroAtrasado) {
+      if (!dataEntregaAtrasada) {
+        setErr('Informe a data da entrega.');
+        return;
+      }
+      if (dataEntregaAtrasada > hojeBrasilia()) {
+        setErr('A data da entrega não pode ser no futuro.');
+        return;
+      }
     }
     setErr(null);
     setSubmitting(true);
     try {
+      const body: Record<string, unknown> = {
+        cliente_id: selected.id,
+        deixou,
+        tinha,
+        trocas,
+        latitude_registro: registroAtrasado ? selected.latitude : coords!.latitude,
+        longitude_registro: registroAtrasado ? selected.longitude : coords!.longitude,
+      };
+      if (registroAtrasado) {
+        body.data_entrega = dataEntregaAtrasada;
+      } else {
+        body.gps_accuracy_registro = coords!.accuracy;
+        body.gps_source = gpsSource;
+        body.cliente_sugerido_id = clienteSugeridoId;
+        body.candidatos_ids = candidatosIds.length > 0 ? candidatosIds : null;
+        body.aprendizado_permitido = pickFromSuggestions && gpsSource === 'live';
+      }
       await api('/registros', {
         method: 'POST',
-        body: JSON.stringify({
-          cliente_id: selected.id,
-          deixou,
-          tinha,
-          trocas,
-          latitude_registro: coords.latitude,
-          longitude_registro: coords.longitude,
-          gps_accuracy_registro: coords.accuracy,
-          gps_source: gpsSource,
-          cliente_sugerido_id: clienteSugeridoId,
-          candidatos_ids: candidatosIds.length > 0 ? candidatosIds : null,
-          aprendizado_permitido: pickFromSuggestions && gpsSource === 'live',
-        }),
+        body: JSON.stringify(body),
       });
       setMsg('Registro salvo com sucesso.');
       resetCamposEntrega(true);
@@ -300,14 +371,27 @@ export default function RegistrarEntrega() {
       )}
 
       {phase === 'start' && (
-        <button
-          type="button"
-          onClick={() => void iniciarGps()}
-          disabled={gpsLoading}
-          className="w-full rounded-2xl bg-roteiro-600 hover:bg-roteiro-700 text-white font-bold text-xl py-6 disabled:opacity-60"
-        >
-          {gpsLoading ? 'Obtendo localização…' : 'Registrar entrega'}
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => void iniciarGps()}
+            disabled={gpsLoading}
+            className="w-full rounded-2xl bg-roteiro-600 hover:bg-roteiro-700 text-white font-bold text-xl py-6 disabled:opacity-60"
+          >
+            {gpsLoading ? 'Obtendo localização…' : 'Registrar entrega'}
+          </button>
+          <button
+            type="button"
+            onClick={iniciarRegistroAtrasado}
+            className="w-full rounded-2xl border-2 border-roteiro-500 bg-white hover:bg-amber-50 text-roteiro-900 font-bold text-lg py-5"
+          >
+            Registrar entrega atrasada
+          </button>
+          <p className="text-sm text-stone-600 text-center leading-relaxed">
+            Use quando você já saiu do cliente e esqueceu de registrar no dia. Escolha o cliente e a data da visita;
+            não é usado GPS nem aprendizado de posição.
+          </p>
+        </div>
       )}
 
       {phase === 'gps' && (
@@ -367,6 +451,48 @@ export default function RegistrarEntrega() {
             className="w-full rounded-xl border border-stone-300 py-4 font-semibold text-stone-800"
           >
             Outro cliente
+          </button>
+        </div>
+      )}
+
+      {phase === 'late_pick' && (
+        <div className="space-y-3">
+          <p className="rounded-xl bg-amber-50 text-amber-950 border border-amber-200 px-4 py-3 text-sm leading-relaxed">
+            Escolha o cliente cadastrado e, no próximo passo, a <strong>data em que a entrega aconteceu</strong> (não
+            pode ser no futuro).
+          </p>
+          {clientesCarregando && (
+            <p className="text-center text-stone-600 py-2">Carregando clientes…</p>
+          )}
+          {!clientesCarregando && todosClientes.length === 0 && (
+            <p className="rounded-xl bg-amber-50 text-amber-950 border border-amber-200 px-4 py-3 text-sm">
+              Não há clientes ativos. Cadastre em <strong>Cliente</strong> ou peça para a proprietária ativar o cadastro.
+            </p>
+          )}
+          <p className="text-stone-700">Cliente:</p>
+          <select
+            className="w-full rounded-xl border border-stone-300 px-4 py-4 text-lg bg-white"
+            defaultValue=""
+            onChange={(e) => {
+              const c = todosClientes.find((x) => x.id === e.target.value);
+              if (c) escolherCliente(c);
+            }}
+          >
+            <option value="" disabled>
+              Selecione…
+            </option>
+            {todosClientes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nome}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={voltarInicio}
+            className="w-full rounded-xl border border-stone-300 py-4 font-semibold text-stone-800"
+          >
+            Voltar
           </button>
         </div>
       )}
@@ -464,11 +590,16 @@ export default function RegistrarEntrega() {
         </div>
       )}
 
-      {phase === 'form' && selected && coords && (
+      {phase === 'form' && selected && (registroAtrasado || coords) && (
         <form onSubmit={onSubmit} className="space-y-4 bg-white rounded-2xl border border-amber-200 p-4 shadow-sm">
+          {registroAtrasado && (
+            <p className="rounded-xl bg-amber-50 text-amber-950 border border-amber-200 px-3 py-2 text-sm">
+              Registro atrasado — posição do cadastro do cliente (sem GPS).
+            </p>
+          )}
           <div>
             <span className="text-sm text-stone-500">Cliente</span>
-            {pickFromSuggestions ? (
+            {pickFromSuggestions && !registroAtrasado ? (
               <p className="text-lg font-semibold">{selected.nome}</p>
             ) : (
               <select
@@ -491,6 +622,22 @@ export default function RegistrarEntrega() {
               </select>
             )}
           </div>
+          {registroAtrasado && (
+            <div>
+              <label htmlFor="data-entrega-atrasada" className="block text-sm font-medium mb-1">
+                Data da entrega
+              </label>
+              <input
+                id="data-entrega-atrasada"
+                type="date"
+                className="w-full rounded-xl border px-4 py-3 text-lg"
+                value={dataEntregaAtrasada}
+                max={hojeBrasilia()}
+                onChange={(e) => setDataEntregaAtrasada(e.target.value)}
+                required
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium mb-1">Deixou</label>
             <input
@@ -525,7 +672,9 @@ export default function RegistrarEntrega() {
             />
           </div>
           <p className="text-sm text-stone-500">
-            Data e hora serão registradas automaticamente (horário de Brasília).
+            {registroAtrasado
+              ? 'O horário é registrado como meio-dia (Brasília) para distinguir registros atrasados.'
+              : 'Data e hora serão registradas automaticamente (horário de Brasília).'}
           </p>
           <div className="flex gap-2">
             <button

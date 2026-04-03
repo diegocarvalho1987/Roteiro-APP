@@ -42,6 +42,7 @@ export type ClienteMaisProximoResponse = {
 
 /** Campos extras aceitos por `POST /registros` (auditoria / aprendizado). */
 export type RegistroCreateMetadata = {
+  data_entrega?: string | null;
   gps_accuracy_registro?: number | null;
   gps_source?: GpsSource | null;
   cliente_sugerido_id?: string | null;

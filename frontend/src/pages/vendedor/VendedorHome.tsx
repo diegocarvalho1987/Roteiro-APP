@@ -10,6 +10,12 @@ export default function VendedorHome() {
       >
         Registrar entrega
       </Link>
+      <Link
+        to="/vendedor/entrega?atrasado=1"
+        className="block w-full rounded-2xl border-2 border-roteiro-500 bg-white hover:bg-amber-50 text-roteiro-900 text-center font-bold text-lg py-4"
+      >
+        Registrar entrega atrasada
+      </Link>
       <div className="grid grid-cols-2 gap-3">
         <Link
           to="/vendedor/cliente"
