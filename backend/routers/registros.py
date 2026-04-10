@@ -98,11 +98,6 @@ def criar_registro(
         )
 
     vendido = body.deixou - body.tinha + body.trocas
-    if vendido < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Valores inconsistentes: vendido não pode ser negativo (deixou - tinha + trocas).",
-        )
     registro_atrasado = body.data_entrega is not None
     hora_fixa_atrasado = "12:00:00" if registro_atrasado else None
 

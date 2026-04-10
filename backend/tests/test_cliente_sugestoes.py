@@ -1222,6 +1222,84 @@ def test_registro_atrasado_persiste_data_fixa_hora_sem_localizacao(
     assert append_loc_called is False
 
 
+def test_criar_registro_permite_vendido_negativo_quando_deixou_menor_que_tinha(
+    settings_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reabastecimento menor que o saldo no ponto (ex.: tinha 3, deixou 2) não deve bloquear o POST."""
+    import config as config_module
+
+    config_module.get_settings.cache_clear()
+    sheets, _, registros = _import_route_modules()
+
+    class _FixedDateTime:
+        @staticmethod
+        def now(tz):
+            return datetime(2026, 4, 3, 10, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr(registros, "datetime", _FixedDateTime)
+
+    monkeypatch.setattr(
+        sheets,
+        "get_cliente_by_id",
+        lambda cid: {
+            "id": cid,
+            "nome": "Cliente",
+            "latitude": -23.0,
+            "longitude": -46.0,
+            "ativo": True,
+            "criado_em": "2025-01-01 00:00:00",
+            "gps_accuracy_media": 0.0,
+            "gps_accuracy_min": 0.0,
+            "gps_amostras": 0,
+            "gps_atualizado_em": "",
+        },
+    )
+    monkeypatch.setattr(sheets, "existe_registro_mesmo_dia", lambda **kwargs: False)
+    append_registro_kw: dict = {}
+
+    def fake_append_registro(**kwargs: object) -> dict:
+        append_registro_kw.update(kwargs)
+        vd = int(kwargs["vendido"])
+        return {
+            "id": "r-neg",
+            "cliente_id": "c1",
+            "cliente_nome": "Cliente",
+            "deixou": kwargs["deixou"],
+            "tinha": kwargs["tinha"],
+            "trocas": kwargs["trocas"],
+            "vendido": vd,
+            "data": kwargs.get("data_s", "2026-04-01"),
+            "hora": kwargs.get("hora_s", "12:00:00"),
+            "latitude_registro": -23.0,
+            "longitude_registro": -46.0,
+            "registrado_por": "vendedor@example.com",
+            "gps_accuracy_registro": 0.0,
+            "gps_source": "",
+            "cliente_sugerido_id": "",
+            "candidatos_ids": [],
+            "aprendizado_permitido": False,
+        }
+
+    monkeypatch.setattr(sheets, "append_registro", fake_append_registro)
+    monkeypatch.setattr(sheets, "append_cliente_localizacao", lambda **kwargs: {"id": "L1"})
+
+    out = registros.criar_registro(
+        RegistroCreate(
+            cliente_id="c1",
+            deixou=2,
+            tinha=5,
+            trocas=0,
+            latitude_registro=-23.0,
+            longitude_registro=-46.0,
+            data_entrega=date(2026, 4, 1),
+        ),
+        {"sub": "vendedor@example.com", "perfil": "vendedor"},
+    )
+
+    assert append_registro_kw["vendido"] == -3
+    assert out.vendido == -3
+
+
 def test_registro_atrasado_rejeita_data_futura(settings_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     import config as config_module
 
