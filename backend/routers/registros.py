@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from config import get_settings
 from dependencies import get_current_user, require_proprietaria, require_vendedor
-from models.schemas import RegistroCreate, RegistroResponse
+from models.schemas import RegistroCreate, RegistroResponse, RegistrosPaginadosResponse
 from routers.clientes import ranked_sugestao_candidates
 from services import location_learning, sheets
 from services.aggregates import build_dashboard, build_resumo_semanal, iso_week_now
@@ -37,8 +37,8 @@ def _to_registro_response(r: dict) -> RegistroResponse:
 @router.get("", response_model=list[RegistroResponse])
 def listar_registros(
     user: Annotated[dict, Depends(get_current_user)],
-    data_inicio: str | None = Query(None),
-    data_fim: str | None = Query(None),
+    data_inicio: date | None = Query(None),
+    data_fim: date | None = Query(None),
     cliente_id: str | None = Query(None),
     limit: int | None = Query(None, ge=1, le=500),
 ):
@@ -50,11 +50,14 @@ def listar_registros(
     else:
         lim = limit if limit is not None else 500
 
+    data_inicio_s = data_inicio.isoformat() if data_inicio is not None else None
+    data_fim_s = data_fim.isoformat() if data_fim is not None else None
+
     def in_range(r: dict) -> bool:
         d = r["data"]
-        if data_inicio and d < data_inicio:
+        if data_inicio_s and d < data_inicio_s:
             return False
-        if data_fim and d > data_fim:
+        if data_fim_s and d > data_fim_s:
             return False
         if cliente_id and r["cliente_id"] != cliente_id:
             return False
@@ -65,6 +68,33 @@ def listar_registros(
     if lim is not None:
         rows = rows[:lim]
     return [_to_registro_response(r) for r in rows]
+
+
+@router.get("/dia-detalhado", response_model=RegistrosPaginadosResponse)
+def listar_registros_dia_detalhado(
+    user: Annotated[dict, Depends(require_proprietaria)],
+    data_ref: date = Query(...),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    _ = user
+    data_ref_s = data_ref.isoformat()
+    rows = sheets.list_registros_raw()
+    rows = [r for r in rows if r["data"] == data_ref_s]
+    rows.sort(key=sheets.registro_sort_key, reverse=True)
+
+    total = len(rows)
+    page_items = rows[offset : offset + limit]
+    has_more = offset + len(page_items) < total
+
+    return RegistrosPaginadosResponse(
+        data_ref=data_ref_s,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=has_more,
+        items=[_to_registro_response(r) for r in page_items],
+    )
 
 
 @router.post("", response_model=RegistroResponse, status_code=status.HTTP_201_CREATED)

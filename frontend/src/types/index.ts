@@ -65,6 +65,15 @@ export type Registro = {
   registrado_por: string;
 };
 
+export type RegistrosPaginadosResponse = {
+  data_ref: string;
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  items: Registro[];
+};
+
 export type DashboardResumo = {
   total_deixou_hoje: number;
   total_vendido_hoje: number;

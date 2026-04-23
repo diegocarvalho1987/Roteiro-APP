@@ -139,6 +139,15 @@ class RegistroResponse(BaseModel):
     registrado_por: str
 
 
+class RegistrosPaginadosResponse(BaseModel):
+    data_ref: str
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+    items: list[RegistroResponse]
+
+
 class DashboardResumo(BaseModel):
     total_deixou_hoje: int
     total_vendido_hoje: int

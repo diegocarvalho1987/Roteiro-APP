@@ -20,6 +20,9 @@ export default function ProprietariaLayout() {
             <NavLink to="/proprietaria/relatorio" className={linkClass}>
               Semanal
             </NavLink>
+            <NavLink to="/proprietaria/entregas-dia" className={linkClass}>
+              Entregas dia
+            </NavLink>
             <NavLink to="/proprietaria/clientes" className={linkClass}>
               Clientes
             </NavLink>

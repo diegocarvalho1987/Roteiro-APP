@@ -11,6 +11,7 @@ import Historico from './pages/vendedor/Historico';
 import Dashboard from './pages/proprietaria/Dashboard';
 import RelatorioSemanal from './pages/proprietaria/RelatorioSemanal';
 import GerenciarClientes from './pages/proprietaria/GerenciarClientes';
+import RelatorioEntregasDia from './pages/proprietaria/RelatorioEntregasDia';
 import type { Perfil } from './types';
 
 function RequireAuth({ perfil, children }: { perfil?: Perfil; children: ReactNode }) {
@@ -60,6 +61,7 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="relatorio" element={<RelatorioSemanal />} />
+        <Route path="entregas-dia" element={<RelatorioEntregasDia />} />
         <Route path="clientes" element={<GerenciarClientes />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

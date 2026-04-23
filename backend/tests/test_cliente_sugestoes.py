@@ -1389,3 +1389,119 @@ def test_registro_atrasado_conflito_mesmo_dia(settings_env: None, monkeypatch: p
             {"sub": "vendedor@example.com", "perfil": "vendedor"},
         )
     assert exc_info.value.status_code == 409
+
+
+def test_listar_registros_dia_detalhado_paginado(settings_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    sheets, _, registros = _import_route_modules()
+
+    rows = [
+        {
+            "id": "r1",
+            "cliente_id": "c1",
+            "cliente_nome": "A",
+            "deixou": 1,
+            "tinha": 0,
+            "trocas": 0,
+            "vendido": 1,
+            "data": "2026-04-23",
+            "hora": "10:00:00",
+            "latitude_registro": -23.0,
+            "longitude_registro": -46.0,
+            "registrado_por": "v1@example.com",
+        },
+        {
+            "id": "r2",
+            "cliente_id": "c2",
+            "cliente_nome": "B",
+            "deixou": 2,
+            "tinha": 1,
+            "trocas": 0,
+            "vendido": 1,
+            "data": "2026-04-23",
+            "hora": "11:00:00",
+            "latitude_registro": -23.0,
+            "longitude_registro": -46.0,
+            "registrado_por": "v2@example.com",
+        },
+        {
+            "id": "r3",
+            "cliente_id": "c3",
+            "cliente_nome": "C",
+            "deixou": 1,
+            "tinha": 1,
+            "trocas": 0,
+            "vendido": 0,
+            "data": "2026-04-22",
+            "hora": "09:00:00",
+            "latitude_registro": -23.0,
+            "longitude_registro": -46.0,
+            "registrado_por": "v3@example.com",
+        },
+    ]
+    monkeypatch.setattr(sheets, "list_registros_raw", lambda: rows)
+    monkeypatch.setattr(sheets, "registro_sort_key", lambda r: (r["data"], r["hora"]))
+
+    out = registros.listar_registros_dia_detalhado(
+        {"sub": "proprietaria@example.com", "perfil": "proprietaria"},
+        data_ref=date(2026, 4, 23),
+        limit=1,
+        offset=0,
+    )
+
+    assert out.data_ref == "2026-04-23"
+    assert out.total == 2
+    assert out.limit == 1
+    assert out.offset == 0
+    assert out.has_more is True
+    assert len(out.items) == 1
+    assert out.items[0].id == "r2"
+
+
+def test_listar_registros_filtro_por_data_date(settings_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    sheets, _, registros = _import_route_modules()
+    monkeypatch.setattr(
+        sheets,
+        "list_registros_raw",
+        lambda: [
+            {
+                "id": "r1",
+                "cliente_id": "c1",
+                "cliente_nome": "A",
+                "deixou": 1,
+                "tinha": 0,
+                "trocas": 0,
+                "vendido": 1,
+                "data": "2026-04-23",
+                "hora": "10:00:00",
+                "latitude_registro": -23.0,
+                "longitude_registro": -46.0,
+                "registrado_por": "v1@example.com",
+            },
+            {
+                "id": "r2",
+                "cliente_id": "c2",
+                "cliente_nome": "B",
+                "deixou": 2,
+                "tinha": 1,
+                "trocas": 0,
+                "vendido": 1,
+                "data": "2026-04-22",
+                "hora": "11:00:00",
+                "latitude_registro": -23.0,
+                "longitude_registro": -46.0,
+                "registrado_por": "v2@example.com",
+            },
+        ],
+    )
+    monkeypatch.setattr(sheets, "registro_sort_key", lambda r: (r["data"], r["hora"]))
+
+    out = registros.listar_registros(
+        {"sub": "proprietaria@example.com", "perfil": "proprietaria"},
+        data_inicio=date(2026, 4, 23),
+        data_fim=date(2026, 4, 23),
+        cliente_id=None,
+        limit=500,
+    )
+
+    assert len(out) == 1
+    assert out[0].id == "r1"
