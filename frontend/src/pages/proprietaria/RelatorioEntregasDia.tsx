@@ -23,6 +23,14 @@ export default function RelatorioEntregasDia() {
   const [err, setErr] = useState<string | null>(null);
   const requestIdRef = useRef(0);
   const PAGE_SIZE = 200;
+  const totais = rows.reduce(
+    (acc, r) => ({
+      deixou: acc.deixou + r.deixou,
+      tinha: acc.tinha + r.tinha,
+      trocas: acc.trocas + r.trocas,
+    }),
+    { deixou: 0, tinha: 0, trocas: 0 }
+  );
 
   const carregar = useCallback((offset = 0, append = false) => {
     const currentRequestId = ++requestIdRef.current;
@@ -101,7 +109,6 @@ export default function RelatorioEntregasDia() {
               <th className="p-2">Deixou</th>
               <th className="p-2">Tinha</th>
               <th className="p-2">Trocas</th>
-              <th className="p-2">Vendido</th>
               <th className="p-2">Data</th>
               <th className="p-2">Hora</th>
               <th className="p-2">Vendedor</th>
@@ -114,12 +121,22 @@ export default function RelatorioEntregasDia() {
                 <td className="p-2">{r.deixou}</td>
                 <td className="p-2">{r.tinha}</td>
                 <td className="p-2">{r.trocas}</td>
-                <td className="p-2">{r.vendido}</td>
                 <td className="p-2 whitespace-nowrap">{formatDateBr(r.data)}</td>
                 <td className="p-2 whitespace-nowrap">{r.hora}</td>
                 <td className="p-2 whitespace-nowrap">{r.registrado_por}</td>
               </tr>
             ))}
+            {rows.length > 0 && (
+              <tr className="border-t-2 border-amber-200 bg-amber-50 font-bold text-roteiro-900">
+                <td className="p-2">Total</td>
+                <td className="p-2">{totais.deixou}</td>
+                <td className="p-2">{totais.tinha}</td>
+                <td className="p-2">{totais.trocas}</td>
+                <td className="p-2" />
+                <td className="p-2" />
+                <td className="p-2" />
+              </tr>
+            )}
           </tbody>
         </table>
         {!loading && rows.length === 0 && !err && (
