@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import type { Registro } from '../../types';
+import { formatDateBr } from '../../utils/date';
 
 export default function Historico() {
   const [rows, setRows] = useState<Registro[]>([]);
@@ -37,7 +38,7 @@ export default function Historico() {
                 <td className="p-2">{r.tinha}</td>
                 <td className="p-2">{r.trocas}</td>
                 <td className="p-2">{r.vendido}</td>
-                <td className="p-2 whitespace-nowrap">{r.data}</td>
+                <td className="p-2 whitespace-nowrap">{formatDateBr(r.data)}</td>
               </tr>
             ))}
           </tbody>

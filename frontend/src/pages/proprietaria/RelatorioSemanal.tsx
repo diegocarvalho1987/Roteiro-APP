@@ -9,6 +9,7 @@ function agoraEmSp(): Date {
 }
 import { api } from '../../services/api';
 import type { ResumoSemanalResponse } from '../../types';
+import { formatDateBr } from '../../utils/date';
 
 function downloadCsv(data: ResumoSemanalResponse) {
   const header = ['cliente', 'total_deixou', 'total_vendido', 'total_trocas', 'aproveitamento_%', 'sugestao'];
@@ -89,7 +90,7 @@ export default function RelatorioSemanal() {
       </div>
       {data && (
         <p className="text-sm text-stone-600">
-          Semana ISO {data.semana}/{data.ano} — {data.inicio} a {data.fim}
+          Semana ISO {data.semana}/{data.ano} — {formatDateBr(data.inicio)} a {formatDateBr(data.fim)}
         </p>
       )}
       {err && <p className="text-red-700 bg-red-50 rounded-lg px-3 py-2">{err}</p>}

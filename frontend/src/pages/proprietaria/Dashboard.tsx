@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import type { DashboardClienteCard, DashboardResponse } from '../../types';
+import { formatDateBr } from '../../utils/date';
 
 function Semaforo({ card }: { card: DashboardClienteCard }) {
   const { nivel, sobra_pct } = card.semaforo;
@@ -63,7 +64,7 @@ export default function Dashboard() {
             <div className="flex-1 min-w-0">
               <p className="font-bold text-roteiro-900">{c.nome}</p>
               <p className="text-sm text-stone-600">
-                Última visita: {c.ultima_visita ?? '—'}
+                Última visita: {formatDateBr(c.ultima_visita)}
               </p>
               <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                 <div>

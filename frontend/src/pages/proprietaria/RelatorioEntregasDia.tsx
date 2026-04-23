@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toZonedTime } from 'date-fns-tz';
 import { api } from '../../services/api';
 import type { Registro, RegistrosPaginadosResponse } from '../../types';
+import { formatDateBr } from '../../utils/date';
 
 const TZ_SP = 'America/Sao_Paulo';
 
@@ -87,7 +88,9 @@ export default function RelatorioEntregasDia() {
       <p className="text-sm text-stone-600">
         Visualização detalhada do dia selecionado, no mesmo formato do histórico do vendedor.
       </p>
-      <p className="text-sm text-stone-500">Total no dia: {total}</p>
+      <p className="text-sm text-stone-500">
+        Data selecionada: {formatDateBr(dataRef)} · Total no dia: {total}
+      </p>
       {err && <p className="text-red-700 bg-red-50 rounded-lg px-3 py-2">{err}</p>}
 
       <div className="overflow-x-auto rounded-xl border border-amber-200 bg-white">
@@ -112,7 +115,7 @@ export default function RelatorioEntregasDia() {
                 <td className="p-2">{r.tinha}</td>
                 <td className="p-2">{r.trocas}</td>
                 <td className="p-2">{r.vendido}</td>
-                <td className="p-2 whitespace-nowrap">{r.data}</td>
+                <td className="p-2 whitespace-nowrap">{formatDateBr(r.data)}</td>
                 <td className="p-2 whitespace-nowrap">{r.hora}</td>
                 <td className="p-2 whitespace-nowrap">{r.registrado_por}</td>
               </tr>
